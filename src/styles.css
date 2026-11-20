@@ -393,6 +393,11 @@ button {
   color: var(--text);
 }
 
+/* 暂时隐藏标签栏首页旁的新建会话入口，需要恢复时删掉这条规则即可 */
+.tab-add-wrap {
+  display: none;
+}
+
 .tab-add {
   width: 29px;
   height: 29px;
