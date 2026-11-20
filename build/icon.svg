@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A1628"/>
+      <stop offset="0.48" stop-color="#0B1D36"/>
+      <stop offset="1" stop-color="#060F1D"/>
+    </linearGradient>
+
+    <radialGradient id="cyanBloom" cx="0.28" cy="0.22" r="0.65">
+      <stop offset="0" stop-color="#53D8FF" stop-opacity="0.20"/>
+      <stop offset="0.55" stop-color="#1A9DC6" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#07111F" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="mintBloom" cx="0.82" cy="0.82" r="0.58">
+      <stop offset="0" stop-color="#7EF0C6" stop-opacity="0.14"/>
+      <stop offset="0.6" stop-color="#37B79D" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#07111F" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.13"/>
+      <stop offset="0.42" stop-color="#FFFFFF" stop-opacity="0.025"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="signal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#55D5FF"/>
+      <stop offset="0.48" stop-color="#6BE8F1"/>
+      <stop offset="1" stop-color="#7EF0C6"/>
+    </linearGradient>
+
+    <linearGradient id="signalCore" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#B7F3FF"/>
+      <stop offset="0.48" stop-color="#D5FFFF"/>
+      <stop offset="1" stop-color="#D5FFEF"/>
+    </linearGradient>
+
+    <filter id="pulseGlow" x="-40%" y="-60%" width="180%" height="220%">
+      <feGaussianBlur stdDeviation="24" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="dotGlow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="tileClip">
+      <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#tileClip)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#tile)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#cyanBloom)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#mintBloom)"/>
+
+    <!-- quiet data texture -->
+    <g fill="#A9E6FF" opacity="0.055">
+      <circle cx="180" cy="210" r="1.6"/>
+      <circle cx="236" cy="210" r="1.6"/>
+      <circle cx="292" cy="210" r="1.6"/>
+      <circle cx="348" cy="210" r="1.6"/>
+      <circle cx="404" cy="210" r="1.6"/>
+      <circle cx="460" cy="210" r="1.6"/>
+      <circle cx="516" cy="210" r="1.6"/>
+      <circle cx="572" cy="210" r="1.6"/>
+      <circle cx="628" cy="210" r="1.6"/>
+      <circle cx="684" cy="210" r="1.6"/>
+      <circle cx="740" cy="210" r="1.6"/>
+      <circle cx="796" cy="210" r="1.6"/>
+      <circle cx="852" cy="210" r="1.6"/>
+      <circle cx="180" cy="266" r="1.6"/>
+      <circle cx="236" cy="266" r="1.6"/>
+      <circle cx="292" cy="266" r="1.6"/>
+      <circle cx="348" cy="266" r="1.6"/>
+      <circle cx="404" cy="266" r="1.6"/>
+      <circle cx="460" cy="266" r="1.6"/>
+      <circle cx="516" cy="266" r="1.6"/>
+      <circle cx="572" cy="266" r="1.6"/>
+      <circle cx="628" cy="266" r="1.6"/>
+      <circle cx="684" cy="266" r="1.6"/>
+      <circle cx="740" cy="266" r="1.6"/>
+      <circle cx="796" cy="266" r="1.6"/>
+      <circle cx="852" cy="266" r="1.6"/>
+      <circle cx="180" cy="322" r="1.6"/>
+      <circle cx="236" cy="322" r="1.6"/>
+      <circle cx="292" cy="322" r="1.6"/>
+      <circle cx="348" cy="322" r="1.6"/>
+      <circle cx="404" cy="322" r="1.6"/>
+      <circle cx="460" cy="322" r="1.6"/>
+      <circle cx="516" cy="322" r="1.6"/>
+      <circle cx="572" cy="322" r="1.6"/>
+      <circle cx="628" cy="322" r="1.6"/>
+      <circle cx="684" cy="322" r="1.6"/>
+      <circle cx="740" cy="322" r="1.6"/>
+      <circle cx="796" cy="322" r="1.6"/>
+      <circle cx="852" cy="322" r="1.6"/>
+      <circle cx="180" cy="734" r="1.6"/>
+      <circle cx="236" cy="734" r="1.6"/>
+      <circle cx="292" cy="734" r="1.6"/>
+      <circle cx="348" cy="734" r="1.6"/>
+      <circle cx="404" cy="734" r="1.6"/>
+      <circle cx="460" cy="734" r="1.6"/>
+      <circle cx="516" cy="734" r="1.6"/>
+      <circle cx="572" cy="734" r="1.6"/>
+      <circle cx="628" cy="734" r="1.6"/>
+      <circle cx="684" cy="734" r="1.6"/>
+      <circle cx="740" cy="734" r="1.6"/>
+      <circle cx="796" cy="734" r="1.6"/>
+      <circle cx="852" cy="734" r="1.6"/>
+      <circle cx="180" cy="790" r="1.6"/>
+      <circle cx="236" cy="790" r="1.6"/>
+      <circle cx="292" cy="790" r="1.6"/>
+      <circle cx="348" cy="790" r="1.6"/>
+      <circle cx="404" cy="790" r="1.6"/>
+      <circle cx="460" cy="790" r="1.6"/>
+      <circle cx="516" cy="790" r="1.6"/>
+      <circle cx="572" cy="790" r="1.6"/>
+      <circle cx="628" cy="790" r="1.6"/>
+      <circle cx="684" cy="790" r="1.6"/>
+      <circle cx="740" cy="790" r="1.6"/>
+      <circle cx="796" cy="790" r="1.6"/>
+      <circle cx="852" cy="790" r="1.6"/>
+    </g>
+
+    <path d="M172 556H854" fill="none" stroke="#9BEEFF" stroke-width="2" opacity="0.08"/>
+
+    <!-- serial pulse -->
+    <path d="M178 556H296V430H424V606H552V466H680V556H790"
+          fill="none" stroke="url(#signal)" stroke-width="64"
+          stroke-linecap="round" stroke-linejoin="round"
+          opacity="0.46" filter="url(#pulseGlow)"/>
+    <path d="M178 556H296V430H424V606H552V466H680V556H790"
+          fill="none" stroke="url(#signal)" stroke-width="48"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M178 556H296V430H424V606H552V466H680V556H790"
+          fill="none" stroke="url(#signalCore)" stroke-width="10"
+          stroke-linecap="round" stroke-linejoin="round" opacity="0.72"/>
+
+    <!-- connection node -->
+    <circle cx="822" cy="556" r="46" fill="#7EF0C6" opacity="0.11" filter="url(#dotGlow)"/>
+    <circle cx="822" cy="556" r="26" fill="#7EF0C6"/>
+    <circle cx="822" cy="556" r="26" fill="none" stroke="#E1FFF4" stroke-width="2" opacity="0.62"/>
+
+    <!-- glass light -->
+    <rect x="100" y="100" width="824" height="430" fill="url(#glass)"/>
+    <rect x="100" y="100" width="824" height="824" fill="none" stroke="#C7F8FF" stroke-width="2" opacity="0.12"/>
+  </g>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185"
+        fill="none" stroke="#A7F0FF" stroke-width="2.5" opacity="0.16"/>
+</svg>
