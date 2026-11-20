@@ -275,6 +275,79 @@ function statusLabel(status) {
   return '等待中'
 }
 
+
+function formatStatBytes(value) {
+  const n = Math.max(0, Number(value) || 0)
+  if (n >= 1024 ** 4) return `${(n / 1024 ** 4).toFixed(1)} TB`
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(0)} MB`
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${Math.round(n)} B`
+}
+
+function formatStatRate(value) {
+  const n = Math.max(0, Number(value) || 0)
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB/s`
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB/s`
+  return `${Math.round(n)} B/s`
+}
+
+function sysLevel(value) {
+  const n = Number(value) || 0
+  if (n >= 85) return 'is-hot'
+  if (n >= 70) return 'is-warn'
+  return ''
+}
+
+function SystemStatsBar({ stats, remote }) {
+  if (!stats) return null
+  const cpu = Math.round(Number(stats.cpu) || 0)
+  const memPct = Math.round(Number(stats.mem?.percent) || 0)
+  const diskPct = Math.round(Number(stats.disk?.percent) || 0)
+  const rx = Number(stats.net?.rx) || 0
+  const tx = Number(stats.net?.tx) || 0
+  return (
+    <div
+      className="terminal-system-stats"
+      title={remote ? '远端主机实时指标' : '本机实时指标'}
+    >
+      <span className={`sys-stat ${sysLevel(cpu)}`} title={`CPU ${cpu}%`}>
+        <Icon name="cpu" size={12} />
+        <em>CPU</em>
+        <strong>{cpu}%</strong>
+      </span>
+      <span
+        className={`sys-stat ${sysLevel(memPct)}`}
+        title={`内存 ${formatStatBytes(stats.mem?.used)} / ${formatStatBytes(
+          stats.mem?.total
+        )}`}
+      >
+        <Icon name="memory" size={12} />
+        <em>内存</em>
+        <strong>{memPct}%</strong>
+      </span>
+      <span
+        className={`sys-stat ${sysLevel(diskPct)}`}
+        title={`磁盘 ${formatStatBytes(stats.disk?.used)} / ${formatStatBytes(
+          stats.disk?.total
+        )}`}
+      >
+        <Icon name="disk" size={12} />
+        <em>磁盘</em>
+        <strong>{diskPct}%</strong>
+      </span>
+      <span
+        className="sys-stat is-net"
+        title={`网络 ↓ ${formatStatRate(rx)} · ↑ ${formatStatRate(tx)}`}
+      >
+        <Icon name="network" size={12} />
+        <strong>↓ {formatStatRate(rx)}</strong>
+        <strong>↑ {formatStatRate(tx)}</strong>
+      </span>
+    </div>
+  )
+}
+
 export default function TerminalPage({
   sessionId,
   active,
@@ -299,6 +372,28 @@ export default function TerminalPage({
   const [shellInfo, setShellInfo] = useState(null)
   const [pid, setPid] = useState(null)
   const [size, setSize] = useState({ cols: 80, rows: 24 })
+  const [systemStats, setSystemStats] = useState(null)
+
+  useEffect(() => {
+    if (!active) return undefined
+    let stopped = false
+    let timer = null
+    const interval = transport === 'ssh' ? 3000 : 2000
+    const tick = async () => {
+      try {
+        const result = await window.terminalAPI?.stats?.(sessionId)
+        if (!stopped && result?.ok) setSystemStats(result)
+      } catch {
+        // 系统信息不可用时保持上一帧
+      }
+      if (!stopped) timer = setTimeout(tick, interval)
+    }
+    tick()
+    return () => {
+      stopped = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [active, sessionId, transport])
   const [error, setError] = useState('')
   const [exitInfo, setExitInfo] = useState(null)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -2158,6 +2253,12 @@ export default function TerminalPage({
               </span>
             </div>
             <div className="terminal-panel-meta">
+              {systemStats ? (
+                <>
+                  <SystemStatsBar stats={systemStats} remote={isSsh} />
+                  <span className="terminal-panel-sep" aria-hidden="true" />
+                </>
+              ) : null}
               <button
                 type="button"
                 className={`icon-btn mini terminal-time-trigger ${

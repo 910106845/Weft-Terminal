@@ -4596,6 +4596,75 @@ button:focus-visible,
   white-space: nowrap;
 }
 
+/* 终端系统指标 */
+.terminal-system-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-right: 2px;
+}
+
+.sys-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.sys-stat svg {
+  flex: none;
+  opacity: 0.65;
+}
+
+.sys-stat em {
+  font-style: normal;
+  color: var(--text-3);
+}
+
+.sys-stat strong {
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sys-stat.is-warn strong {
+  color: var(--warning);
+}
+
+.sys-stat.is-hot strong {
+  color: var(--danger);
+}
+
+.sys-stat.is-net strong {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+.sys-stat.is-net strong + strong {
+  margin-left: 2px;
+}
+
+@media (max-width: 1420px) {
+  .sys-stat em {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .terminal-system-stats {
+    display: none;
+  }
+}
+
 .terminal-panel-meta {
   flex: none;
   display: flex;

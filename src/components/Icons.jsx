@@ -73,6 +73,35 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M12 2v10" />
         </svg>
       )
+    case 'cpu':
+      return (
+        <svg {...props}>
+          <rect x="7" y="7" width="10" height="10" rx="2" />
+          <path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4" />
+        </svg>
+      )
+    case 'memory':
+      return (
+        <svg {...props}>
+          <rect x="3" y="8" width="18" height="9" rx="2" />
+          <path d="M7 8v9M11 8v9M15 8v9M19 8v9M6 5v3M10 5v3M14 5v3M18 5v3" />
+        </svg>
+      )
+    case 'disk':
+      return (
+        <svg {...props}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 12h11" />
+          <circle cx="17" cy="12" r="1.5" />
+        </svg>
+      )
+    case 'network':
+      return (
+        <svg {...props}>
+          <path d="M7 20V4M7 4 3 8M7 4l4 4" />
+          <path d="M17 4v16M17 20l-4-4M17 20l4-4" />
+        </svg>
+      )
     case 'clock':
       return (
         <svg {...props}>

@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('terminalAPI', {
     ipcRenderer.invoke('terminal:close', { terminalId }),
   choosePrivateKey: () => ipcRenderer.invoke('app:choose-private-key'),
   history: (terminalId) => ipcRenderer.invoke('terminal:history', { terminalId }),
+    stats: (terminalId) => ipcRenderer.invoke('terminal:stats', { terminalId }),
   respondHostKey: (terminalId, accept) =>
     ipcRenderer.send('terminal:host-key-response', { terminalId, accept }),
   virtual: {

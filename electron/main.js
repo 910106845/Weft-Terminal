@@ -1612,6 +1612,360 @@ ipcMain.handle('terminal:shells', () => {
   }
 })
 
+// ---------- 终端系统指标（CPU / 内存 / 磁盘 / 网络） ----------
+// 本机用 systeminformation + 各平台网络计数；SSH 通过独立 exec 通道在远端采样。
+
+let systemInfoModule
+function loadSystemInformation() {
+  if (systemInfoModule !== undefined) return systemInfoModule
+  try {
+    systemInfoModule = require('systeminformation')
+  } catch (error) {
+    systemInfoModule = null
+    console.warn('[stats] systeminformation unavailable:', error.message)
+  }
+  return systemInfoModule
+}
+
+let localStatsCache = null
+let localNetPrev = { at: 0, rx: 0, tx: 0 }
+
+function percentOf(used, total) {
+  const t = Number(total) || 0
+  if (t <= 0) return 0
+  return Math.max(0, Math.min(100, (Number(used) / t) * 100))
+}
+
+function round1(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? Math.round(n * 10) / 10 : 0
+}
+
+async function readLocalNetCounters() {
+  try {
+    if (process.platform === 'win32') {
+      const script = [
+        "$ErrorActionPreference='SilentlyContinue'",
+        '$rx=(Get-NetAdapterStatistics | Measure-Object ReceivedBytes -Sum).Sum',
+        '$tx=(Get-NetAdapterStatistics | Measure-Object SentBytes -Sum).Sum',
+        'Write-Output "$rx|$tx"'
+      ].join('; ')
+      const { error, stdout } = await execFileAsync('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        script
+      ])
+      if (error) return { rate: true, rx: 0, tx: 0 }
+      const [rx, tx] = String(stdout).trim().split('|').map(Number)
+      return { rate: true, rx: rx || 0, tx: tx || 0 }
+    }
+
+    let rx = 0
+    let tx = 0
+    if (process.platform === 'darwin') {
+      const { stdout } = await execFileAsync('/usr/sbin/netstat', ['-ibn'])
+      const seen = new Set()
+      String(stdout)
+        .split(/\r?\n/)
+        .forEach((line) => {
+          const parts = line.trim().split(/\s+/)
+          if (parts.length < 11) return
+          const iface = parts[0]
+          if (/^lo/.test(iface) || seen.has(iface)) return
+          if (!/^\d+$/.test(parts[6]) || !/^\d+$/.test(parts[9])) return
+          seen.add(iface)
+          rx += Number(parts[6])
+          tx += Number(parts[9])
+        })
+    } else {
+      const raw = await fs.readFile('/proc/net/dev', 'utf8')
+      raw.split(/\r?\n/).forEach((line) => {
+        const [name, rest] = line.split(':')
+        if (!rest) return
+        const iface = name.trim()
+        if (/^lo/.test(iface)) return
+        const fields = rest.trim().split(/\s+/)
+        const r = Number(fields[0])
+        const t = Number(fields[8])
+        if (Number.isFinite(r)) rx += r
+        if (Number.isFinite(t)) tx += t
+      })
+    }
+    return { rate: false, rx, tx }
+  } catch {
+    return { rate: true, rx: 0, tx: 0 }
+  }
+}
+
+async function getLocalNetRate() {
+  const now = Date.now()
+  const sample = await readLocalNetCounters()
+  if (sample.rate) return { rx: sample.rx, tx: sample.tx }
+  const dt = (now - localNetPrev.at) / 1000
+  let rx = 0
+  let tx = 0
+  if (localNetPrev.at && dt > 0.2) {
+    rx = Math.max(0, (sample.rx - localNetPrev.rx) / dt)
+    tx = Math.max(0, (sample.tx - localNetPrev.tx) / dt)
+  }
+  localNetPrev = { at: now, rx: sample.rx, tx: sample.tx }
+  return { rx, tx }
+}
+
+function pickLocalDisk(list) {
+  if (!Array.isArray(list) || !list.length) return null
+  const preferred =
+    process.platform === 'darwin'
+      ? '/System/Volumes/Data'
+      : process.platform === 'win32'
+        ? 'C:'
+        : '/'
+  return (
+    list.find((disk) => disk.mount === preferred) ||
+    list.find((disk) => String(disk.mount || '').startsWith(preferred)) ||
+    list.find((disk) => disk.mount === '/') ||
+    list[0]
+  )
+}
+
+async function getLocalSystemStats() {
+  const now = Date.now()
+  if (localStatsCache && now - localStatsCache.at < 1500) {
+    return localStatsCache.data
+  }
+  const si = loadSystemInformation()
+  if (!si) throw new Error('系统信息组件不可用')
+  const [load, mem, diskList, net] = await Promise.all([
+    si.currentLoad(),
+    si.mem(),
+    si.fsSize(),
+    getLocalNetRate()
+  ])
+  const disk = pickLocalDisk(diskList)
+  const memTotal = Number(mem.total) || 0
+  const memAvailable = Number.isFinite(mem.available) ? mem.available : mem.free
+  const memUsed = Math.max(0, memTotal - (Number(memAvailable) || 0))
+  const data = {
+    cpu: round1(load.currentLoad),
+    mem: {
+      used: memUsed,
+      total: memTotal,
+      percent: percentOf(memUsed, memTotal)
+    },
+    disk: {
+      used: Number(disk?.used) || 0,
+      total: Number(disk?.size) || 0,
+      percent: round1(disk?.use)
+    },
+    net
+  }
+  localStatsCache = { at: now, data }
+  return data
+}
+
+function sshExec(client, command, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    let settled = false
+    let stream = null
+    let stdout = ''
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try {
+        stream?.close()
+      } catch {
+        // ignore
+      }
+      resolve(result)
+    }
+    const timer = setTimeout(
+      () => finish({ ok: false, error: 'timeout', stdout }),
+      timeoutMs
+    )
+    try {
+      client.exec(command, (error, nextStream) => {
+        if (settled) return
+        if (error) {
+          finish({ ok: false, error: error.message, stdout })
+          return
+        }
+        stream = nextStream
+        stream.on('data', (chunk) => {
+          stdout += chunk.toString('utf8')
+          if (stdout.length > 64 * 1024) stdout = stdout.slice(-64 * 1024)
+        })
+        stream.stderr.on('data', () => {})
+        stream.on('close', () => finish({ ok: true, stdout }))
+      })
+    } catch (error) {
+      finish({ ok: false, error: error.message, stdout })
+    }
+  })
+}
+
+const LINUX_STATS_SCRIPT = `export LC_ALL=C
+read _ u n s i w q sq st _ < /proc/stat
+t1=$((u+n+s+i+w+q+sq+st)); i1=$((i+w))
+n1=$(awk '{gsub(":"," "); if ($1 ~ /^(eth|en|wl|eno|ens|enp|bond|br)/) {rx+=$2; tx+=$10}} END{printf "%d %d", rx, tx}' /proc/net/dev)
+sleep 0.25
+read _ u n s i w q sq st _ < /proc/stat
+t2=$((u+n+s+i+w+q+sq+st)); i2=$((i+w))
+n2=$(awk '{gsub(":"," "); if ($1 ~ /^(eth|en|wl|eno|ens|enp|bond|br)/) {rx+=$2; tx+=$10}} END{printf "%d %d", rx, tx}' /proc/net/dev)
+set -- $n1; r1=$1; x1=$2
+set -- $n2; r2=$1; x2=$2
+cpu=$(awk -v t1=$t1 -v i1=$i1 -v t2=$t2 -v i2=$i2 'BEGIN{d=t2-t1; if (d<=0) {print 0; exit} printf "%.1f", 100*(d-(i2-i1))/d}')
+mem=$(awk '/^MemTotal:/{t=$2}/^MemAvailable:/{a=$2}END{printf "%d %d", t*1024, (t-a)*1024}' /proc/meminfo)
+disk=$(df -kP / | awk 'NR==2{printf "%d %d", $2*1024, $3*1024}')
+rx=$(( (r2-r1)*4 )); tx=$(( (x2-x1)*4 ))
+[ "$rx" -lt 0 ] && rx=0
+[ "$tx" -lt 0 ] && tx=0
+echo "$cpu|$mem|$disk|$rx|$tx"`
+
+const DARWIN_STATS_SCRIPT = `export LC_ALL=C
+cpu=$(top -l 1 -n 0 | awk '/CPU usage/ {gsub("%",""); print 100-$7; exit}')
+mem=$(vm_stat | awk -v ps=$(sysctl -n hw.pagesize) -v total=$(sysctl -n hw.memsize) '
+  /Pages active/ {a=$NF}
+  /Pages wired down/ {w=$NF}
+  /Pages occupied by compressor/ {c=$NF}
+  END {gsub(/[^0-9]/,"",a); gsub(/[^0-9]/,"",w); gsub(/[^0-9]/,"",c); printf "%d %d", total, (a+w+c)*ps}')
+disk=$(df -kP /System/Volumes/Data 2>/dev/null | awk 'NR==2{printf "%d %d", $2*1024, $3*1024}')
+[ -z "$disk" ] && disk=$(df -kP / | awk 'NR==2{printf "%d %d", $2*1024, $3*1024}')
+n1=$(netstat -ibn | awk '!seen[$1]++ && $1 !~ /^lo/ && $7 ~ /^[0-9]+$/ {rx+=$7; tx+=$10} END{printf "%d %d", rx, tx}')
+sleep 0.25
+n2=$(netstat -ibn | awk '!seen[$1]++ && $1 !~ /^lo/ && $7 ~ /^[0-9]+$/ {rx+=$7; tx+=$10} END{printf "%d %d", rx, tx}')
+set -- $n1; r1=$1; x1=$2
+set -- $n2; r2=$1; x2=$2
+rx=$(( (r2-r1)*4 )); tx=$(( (x2-x1)*4 ))
+[ "$rx" -lt 0 ] && rx=0
+[ "$tx" -lt 0 ] && tx=0
+echo "$cpu|$mem|$disk|$rx|$tx"`
+
+const WINDOWS_STATS_SCRIPT = `$ErrorActionPreference = 'SilentlyContinue'
+$cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'").PercentProcessorTime
+$os = Get-CimInstance Win32_OperatingSystem
+$mt = [int64]$os.TotalVisibleMemorySize * 1024
+$mu = $mt - ([int64]$os.FreePhysicalMemory * 1024)
+$d = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+if (-not $d) { $d = Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } | Select-Object -First 1 }
+$dt = [int64]$d.Size
+$du = $dt - [int64]$d.FreeSpace
+$rx = (Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface | Measure-Object BytesReceivedPersec -Sum).Sum
+$tx = (Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface | Measure-Object BytesSentPersec -Sum).Sum
+Write-Output "$cpu|$mt|$mu|$dt|$du|$rx|$tx"`
+
+function parseRemoteStats(stdout) {
+  const lines = String(stdout || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const parts = lines[i].split('|').map((part) => part.trim())
+    let values = null
+    if (parts.length === 5) {
+      // POSIX 脚本：cpu|memTotal memUsed|diskTotal diskUsed|rx|tx
+      const mem = parts[1].split(/\s+/).map((part) => Number(part))
+      const disk = parts[2].split(/\s+/).map((part) => Number(part))
+      if (mem.length !== 2 || disk.length !== 2) continue
+      values = [
+        Number(parts[0]),
+        mem[0],
+        mem[1],
+        disk[0],
+        disk[1],
+        Number(parts[3]),
+        Number(parts[4])
+      ]
+    } else if (parts.length === 7) {
+      // Windows PowerShell：cpu|memTotal|memUsed|diskTotal|diskUsed|rx|tx
+      values = parts.map((part) => Number(part))
+    } else {
+      continue
+    }
+    if (values.some((value) => !Number.isFinite(value))) continue
+    const [cpu, memTotal, memUsed, diskTotal, diskUsed, rx, tx] = values
+    return {
+      cpu: round1(cpu),
+      mem: {
+        used: memUsed,
+        total: memTotal,
+        percent: percentOf(memUsed, memTotal)
+      },
+      disk: {
+        used: diskUsed,
+        total: diskTotal,
+        percent: percentOf(diskUsed, diskTotal)
+      },
+      net: { rx: Math.max(0, rx), tx: Math.max(0, tx) }
+    }
+  }
+  return null
+}
+
+async function detectRemoteOs(term) {
+  if (term.statsOs) return term.statsOs
+  const uname = await sshExec(term.client, 'uname -s', 4000)
+  const text = String(uname.stdout || '').trim()
+  if (/Darwin/i.test(text)) return (term.statsOs = 'darwin')
+  if (/Linux/i.test(text)) return (term.statsOs = 'linux')
+  if (/MINGW|MSYS|CYGWIN/i.test(text)) return (term.statsOs = 'windows')
+  const ps = await sshExec(
+    term.client,
+    'powershell -NoProfile -Command "$PSVersionTable.PSEdition"',
+    5000
+  )
+  if (ps.ok && /Core|Desktop/i.test(ps.stdout)) return (term.statsOs = 'windows')
+  return (term.statsOs = 'unknown')
+}
+
+async function getSshSystemStats(term) {
+  if (!term.client || term.pending) throw new Error('SSH 尚未就绪')
+  const now = Date.now()
+  if (term.statsCache && now - term.statsCache.at < 2000) {
+    return term.statsCache.data
+  }
+  if (term.statsPending) return term.statsPending
+  term.statsPending = (async () => {
+    const osType = await detectRemoteOs(term)
+    if (osType === 'unknown') throw new Error('无法识别远端系统')
+    let command
+    if (osType === 'windows') {
+      const encoded = Buffer.from(WINDOWS_STATS_SCRIPT, 'utf16le').toString('base64')
+      command = `powershell -NoProfile -EncodedCommand ${encoded}`
+    } else {
+      const script = osType === 'darwin' ? DARWIN_STATS_SCRIPT : LINUX_STATS_SCRIPT
+      const encoded = Buffer.from(script, 'utf8').toString('base64')
+      command = `echo ${encoded} | base64 --decode | sh`
+    }
+    const result = await sshExec(term.client, command, 10000)
+    if (!result.ok) throw new Error(result.error || '远端采样失败')
+    const data = parseRemoteStats(result.stdout)
+    if (!data) throw new Error('远端系统信息格式不支持')
+    term.statsCache = { at: Date.now(), data }
+    return data
+  })().finally(() => {
+    term.statsPending = null
+  })
+  return term.statsPending
+}
+
+ipcMain.handle('terminal:stats', async (_event, payload = {}) => {
+  const term = terminals.get(payload.terminalId)
+  if (!term) return { ok: false, error: '终端未运行' }
+  try {
+    if (term.kind === 'local') {
+      return { ok: true, local: true, ...(await getLocalSystemStats()) }
+    }
+    if (term.kind === 'ssh') {
+      const data = await getSshSystemStats(term)
+      return { ok: true, local: false, ...data }
+    }
+  } catch (error) {
+    return { ok: false, error: error.message || String(error) }
+  }
+  return { ok: false, error: '不支持的终端' }
+})
+
 ipcMain.handle('terminal:create', async (event, options = {}) => {
   const terminalId = options.terminalId
   if (!terminalId) return { ok: false, error: '缺少终端标识' }
