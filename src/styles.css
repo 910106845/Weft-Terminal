@@ -8295,9 +8295,9 @@ button:focus-visible,
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--accent);
-  font-size: 14px;
-  font-weight: 500;
+  color: #000;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -8311,7 +8311,6 @@ button:focus-visible,
 .liquid-btn.is-sm {
   height: 32px;
   padding: 0 16px;
-  font-size: 12px;
 }
 
 .liquid-btn.is-md {
@@ -8424,6 +8423,10 @@ button:focus-visible,
   transform: none;
 }
 
+:root[data-theme='dark'] .liquid-btn {
+  color: #fff;
+}
+
 /* 发送按钮沿用布局尺寸，不带旧配色 */
 .liquid-btn.liquid-send {
   min-width: 136px;
@@ -8431,10 +8434,6 @@ button:focus-visible,
 
 .liquid-btn.liquid-send .liquid-btn-content {
   gap: 8px;
-}
-
-.liquid-btn.is-stopping {
-  color: var(--danger);
 }
 
 /* 状态胶囊：保留圆点与元信息，材质完全交给玻璃层 */
@@ -8448,15 +8447,11 @@ button:focus-visible,
 
 .status-capsule-meta {
   border-left-color: color-mix(in srgb, currentColor 22%, transparent);
-  color: var(--text-2);
+  color: rgba(0, 0, 0, 0.62);
 }
 
-.status-capsule.is-on .status-capsule-meta {
-  color: var(--text-2);
-}
-
-.liquid-btn.is-pill.is-on {
-  color: var(--mint);
+:root[data-theme='dark'] .status-capsule-meta {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .liquid-btn.is-pill.is-on .status-capsule-meta {
