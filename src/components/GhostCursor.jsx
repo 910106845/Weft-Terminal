@@ -382,7 +382,6 @@ const GhostCursor = ({
   bloomRadius = 1,
   bloomThreshold = 0.025,
   edgeIntensity = 0,
-  clickPuff = true,
   intro = true,
   theme = 'dark',
   mixBlendMode,
@@ -417,7 +416,6 @@ const GhostCursor = ({
     bloomRadius: clamp(bloomRadius, 0, 3),
     threshold: Math.max(0, bloomThreshold),
     edge: clamp(edgeIntensity, 0, 1),
-    clickPuff,
     intro,
     theme: light ? 1 : 0,
     fadeDelay: Math.max(0, fadeDelayMs ?? (touch ? 500 : 1000)),
@@ -525,7 +523,6 @@ const GhostCursor = ({
     const ghost = { x: 0, y: 0, vx: 0, vy: 0, px: 0, py: 0, ready: false };
     const pointer = { x: 0, y: 0, inside: false, moved: -1e9 };
     const flow = { y: 0 };
-    const puffs = [];
     let presence = 0;
     let current = 0;
     let raf = 0;
@@ -598,12 +595,7 @@ const GhostCursor = ({
       gl.uniform1f(u.uTrail, active ? 0.42 * presence * introBoost : 0);
       gl.uniform1f(u.uIdle, active ? 0.22 * presence * introBoost : 0);
       gl.uniform2f(u.uVelocity, ghost.vx * scale * 0.5, -ghost.vy * scale * 0.5);
-      const puff = puffs.shift();
-      if (puff) {
-        gl.uniform4f(u.uPuff, puff.x * scale, (view.height - puff.y) * scale, sigma * 1.4, 0.9);
-      } else {
-        gl.uniform4f(u.uPuff, 0, 0, 1, 0);
-      }
+      gl.uniform4f(u.uPuff, 0, 0, 1, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       current = 1 - current;
     };
@@ -733,7 +725,7 @@ const GhostCursor = ({
       simulate(dt, presence > 0.01);
       render();
 
-      const busy = introLive || target > 0 || presence > 0.001 || puffs.length > 0;
+      const busy = introLive || target > 0 || presence > 0.001;
       if (!busy) {
         for (const target of sims) {
           gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
@@ -786,16 +778,6 @@ const GhostCursor = ({
       wake();
     };
 
-    const onPointerDown = event => {
-      const spot = locate(event);
-      if (!spot.inside) return;
-      onPointerMove(event);
-      if (settingsRef.current.clickPuff) {
-        puffs.push({ x: spot.x, y: spot.y });
-        wake();
-      }
-    };
-
     const onLeave = () => {
       const now = performance.now();
       if (pointer.inside && now - pointer.moved < settingsRef.current.fadeDelay) pointer.moved = now;
@@ -804,7 +786,6 @@ const GhostCursor = ({
     };
 
     window.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener('pointerdown', onPointerDown, { passive: true });
     document.documentElement.addEventListener('pointerleave', onLeave);
 
     const onLost = event => {
@@ -844,7 +825,6 @@ const GhostCursor = ({
       resizeObserver.disconnect();
       intersection.disconnect();
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerdown', onPointerDown);
       document.documentElement.removeEventListener('pointerleave', onLeave);
       document.removeEventListener('visibilitychange', onVisibility);
       canvas.removeEventListener('webglcontextlost', onLost);
