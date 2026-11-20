@@ -134,11 +134,13 @@ export default function SendPane({
             <Icon name="panel-left" size={14} />
           </button>
           <button
-            className="icon-btn"
+            type="button"
+            className={`icon-btn ${open ? 'is-active' : ''}`}
             onClick={onToggleOpen}
             title={open ? '收起发送区' : '展开发送区'}
+            aria-pressed={open}
           >
-            <Icon name="chevron-down" size={14} className={open ? '' : 'rotate'} />
+            <Icon name="panel-bottom" size={14} />
           </button>
         </div>
       </header>

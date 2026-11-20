@@ -1,12 +1,11 @@
-import { Component, Suspense, lazy, useEffect, useState } from 'react'
 import BrandMark from './BrandMark'
+import GridScan from './GridScan'
 import Icon from './Icons'
+import MetallicPaint from './MetallicPaint'
 import PageTag from './PageTag'
 
-const Spline = lazy(() => import('@splinetool/react-spline'))
-
-const SCENE_URL =
-  'https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode'
+const WORDMARK_FONT =
+  "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
 
 const SESSION_ENTRIES = [
   {
@@ -43,69 +42,6 @@ const SESSION_ENTRIES = [
   }
 ]
 
-class SceneBoundary extends Component {
-  constructor(props) {
-    super(props)
-    this.state = { failed: false }
-  }
-
-  static getDerivedStateFromError() {
-    return { failed: true }
-  }
-
-  componentDidCatch() {
-    // 3D 场景不可用时保留静态背景，不影响首页功能
-  }
-
-  render() {
-    return this.state.failed ? null : this.props.children
-  }
-}
-
-function SceneBackdrop() {
-  const [ready, setReady] = useState(false)
-  const [timedOut, setTimedOut] = useState(false)
-
-  useEffect(() => {
-    if (ready) return undefined
-    const timer = setTimeout(() => setTimedOut(true), 12000)
-    return () => clearTimeout(timer)
-  }, [ready])
-
-  return (
-    <div
-      className={`home-spline ${ready ? 'is-ready' : ''}`}
-      aria-hidden="true"
-    >
-      <SceneBoundary>
-        <Suspense fallback={null}>
-          <Spline
-            scene={SCENE_URL}
-            htmlContentMode="none"
-            onLoad={(app) => {
-              // 让场景自带的动画略微加快（运行时未公开 speed，mixer 是稳定存在的）
-              try {
-                const mixer = app?._animationControls?.mixer
-                if (mixer && Number.isFinite(mixer.timeScale)) {
-                  mixer.timeScale = 1.3
-                }
-              } catch {
-                // 场景结构变化时保持原速
-              }
-              setReady(true)
-            }}
-          />
-        </Suspense>
-      </SceneBoundary>
-      <span
-        className={`home-scene-pulse ${
-          ready || timedOut ? 'is-hidden' : ''
-        }`}
-      />
-    </div>
-  )
-}
-
 export default function HomePage({
   tabsCount = 0,
   connectedCount = 0,
@@ -122,6 +58,7 @@ export default function HomePage({
     onNewSsh,
     onNewVirtual
   }
+  const dark = resolvedTheme === 'dark'
 
   return (
     <div className="app home-page">
@@ -164,10 +101,30 @@ export default function HomePage({
 
       <div className="home-stage">
         <section className="home-hero" aria-label="Weft Terminal 首页">
-          <div className="home-grid" aria-hidden="true" />
-          <div className="home-glow" aria-hidden="true" />
-          <div className="home-spotlight" aria-hidden="true" />
-          <SceneBackdrop />
+          <div className="home-scan" aria-hidden="true">
+            <GridScan
+              className="home-gridscan"
+              linesColor={dark ? '#30445c' : '#d3dce8'}
+              scanColor={dark ? '#5fc8ff' : '#2563eb'}
+              cells={10}
+              lineThickness={1}
+              depth={3}
+              depthFade={0.72}
+              parallax={0.8}
+              reflection={0.28}
+              shading={0.65}
+              scanDuration={2.6}
+              scanDelay={1.1}
+              trail={0.5}
+              glow={dark ? 0.75 : 0.45}
+              autoScan
+              interactive
+              clickEffect="ping"
+              intro
+              lightMode={!dark}
+              dpr={Math.min(window.devicePixelRatio || 1, 1.75)}
+            />
+          </div>
           <div className="home-scrim" aria-hidden="true" />
 
           <span className="home-reg home-reg-tl" aria-hidden="true" />
@@ -177,6 +134,24 @@ export default function HomePage({
 
           <div className="home-content">
             <div className="home-head">
+              <div className="home-wordmark" aria-hidden="true">
+                <MetallicPaint
+                  text="Weft Terminal"
+                  fontFamily={WORDMARK_FONT}
+                  fontWeight={800}
+                  lightMode={!dark}
+                  density={3.2}
+                  softness={0.1}
+                  dispersion={0.32}
+                  distortion={0.045}
+                  edgeBend={0.72}
+                  angle={70}
+                  speed={0.9}
+                  scale={0.78}
+                  mouseTilt={0.35}
+                  intro
+                />
+              </div>
               <span className="home-eyebrow">
                 <span className="home-eyebrow-dot" />
                 NEW SESSION

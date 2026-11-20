@@ -7608,10 +7608,8 @@ button:focus-visible,
   --home-muted: #5f7085;
   --home-line: rgba(13, 24, 38, 0.11);
   --home-line-soft: rgba(13, 24, 38, 0.05);
-  --home-scrim: rgba(242, 245, 249, 0.96);
-  --home-glow-a: rgba(37, 99, 235, 0.1);
-  --home-glow-b: rgba(15, 157, 120, 0.12);
-  --home-spot: rgba(13, 24, 38, 0.05);
+  --home-scrim: rgba(242, 245, 249, 0.9);
+  --home-scrim-mid: rgba(242, 245, 249, 0.44);
 }
 
 :root[data-theme='dark'] .home-page {
@@ -7620,10 +7618,8 @@ button:focus-visible,
   --home-muted: #94a5ba;
   --home-line: rgba(158, 186, 220, 0.16);
   --home-line-soft: rgba(158, 186, 220, 0.07);
-  --home-scrim: rgba(5, 8, 14, 0.94);
-  --home-glow-a: rgba(56, 128, 255, 0.2);
-  --home-glow-b: rgba(48, 214, 160, 0.13);
-  --home-spot: rgba(255, 255, 255, 0.08);
+  --home-scrim: rgba(5, 8, 14, 0.86);
+  --home-scrim-mid: rgba(5, 8, 14, 0.4);
 }
 
 .home-topbar {
@@ -7680,117 +7676,23 @@ button:focus-visible,
   box-shadow: var(--shadow-md);
 }
 
-.home-grid {
+.home-scan {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-image:
-    linear-gradient(var(--home-line-soft) 1px, transparent 1px),
-    linear-gradient(90deg, var(--home-line-soft) 1px, transparent 1px);
-  background-size: 46px 46px;
-  -webkit-mask-image: radial-gradient(120% 110% at 24% 42%, #000 0%, transparent 74%);
-  mask-image: radial-gradient(120% 110% at 24% 42%, #000 0%, transparent 74%);
-  pointer-events: none;
 }
 
-.home-glow {
+.home-gridscan {
   position: absolute;
   inset: 0;
-  z-index: 0;
-  background:
-    radial-gradient(620px 440px at 80% 16%, var(--home-glow-b), transparent 66%),
-    radial-gradient(760px 560px at 18% 96%, var(--home-glow-a), transparent 68%);
-  pointer-events: none;
-}
-
-.home-spotlight {
-  position: absolute;
-  top: -36%;
-  left: 4%;
-  width: 56%;
-  height: 132%;
-  z-index: 0;
-  background: linear-gradient(
-    104deg,
-    transparent 0%,
-    var(--home-spot) 40%,
-    transparent 74%
-  );
-  filter: blur(16px);
-  transform: rotate(9deg);
-  animation: home-spot 16s ease-in-out infinite alternate;
-  pointer-events: none;
-}
-
-@keyframes home-spot {
-  from {
-    opacity: 0.55;
-    transform: rotate(9deg) translate3d(-1.5%, 0, 0);
-  }
-  to {
-    opacity: 0.95;
-    transform: rotate(9deg) translate3d(1.5%, 0, 0);
-  }
-}
-
-.home-spline {
-  position: absolute;
-  top: -8%;
-  right: -7%;
-  bottom: -8%;
-  left: 34%;
-  z-index: 1;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%);
-  mask-image: linear-gradient(90deg, transparent 0%, #000 30%);
-}
-
-.home-spline > div {
   width: 100%;
   height: 100%;
-  opacity: 0;
-  transition: opacity 0.42s ease;
 }
 
-.home-spline.is-ready > div {
-  opacity: 1;
-}
-
-.home-scene-pulse {
-  position: absolute;
-  right: 16%;
-  top: 50%;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--home-line);
-  border-radius: 50%;
-  animation: home-pulse 1.6s ease-out infinite;
-}
-
-.home-scene-pulse::before {
-  content: '';
-  position: absolute;
-  inset: 12px;
-  border-radius: 50%;
-  background: var(--mint);
-  opacity: 0.5;
-}
-
-.home-scene-pulse.is-hidden {
-  display: none;
-}
-
-@keyframes home-pulse {
-  0% {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-  35% {
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(1.9);
-    opacity: 0;
-  }
+.home-wordmark {
+  width: min(100%, 430px);
+  height: 72px;
+  margin-bottom: 2px;
 }
 
 .home-scrim {
@@ -7801,10 +7703,11 @@ button:focus-visible,
     linear-gradient(
       90deg,
       var(--home-scrim) 0%,
-      var(--home-scrim) 27%,
-      transparent 65%
+      var(--home-scrim) 24%,
+      var(--home-scrim-mid) 46%,
+      transparent 74%
     ),
-    linear-gradient(0deg, var(--home-scrim) 0%, transparent 24%);
+    linear-gradient(0deg, var(--home-scrim) 0%, transparent 22%);
   pointer-events: none;
 }
 
@@ -7823,7 +7726,7 @@ button:focus-visible,
 .home-head {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 
 .home-eyebrow {
@@ -8287,8 +8190,9 @@ button:focus-visible,
     padding: 30px 34px;
   }
 
-  .home-spline {
-    left: 38%;
+  .home-wordmark {
+    width: min(100%, 360px);
+    height: 62px;
   }
 }
 
@@ -8300,6 +8204,12 @@ button:focus-visible,
 
   .home-title {
     font-size: 21px;
+  }
+
+  .home-wordmark {
+    width: 320px;
+    height: 54px;
+    margin-bottom: 0;
   }
 
   .home-action {
@@ -8318,15 +8228,10 @@ button:focus-visible,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-spotlight,
   .home-eyebrow,
   .home-title,
   .home-action,
   .home-foot {
-    animation: none;
-  }
-
-  .home-scene-pulse {
     animation: none;
   }
 }

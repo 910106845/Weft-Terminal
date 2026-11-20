@@ -401,6 +401,13 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M2 12h3l2.5-7 4 14L15 8l2 4h5" />
         </svg>
       )
+    case 'panel-bottom':
+      return (
+        <svg {...props}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M3 15h18" />
+        </svg>
+      )
     case 'panel-left':
       return (
         <svg {...props}>
