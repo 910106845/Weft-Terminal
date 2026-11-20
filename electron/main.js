@@ -380,7 +380,7 @@ async function createSshTerminal(event, terminalId, options = {}) {
       resolve(value)
     }
 
-    const finishExit = (message, exitCode = null) => {
+    const finishExit = (message, exitCode = null, network = false) => {
       if (ended) return
       ended = true
       if (!settled) {
@@ -394,7 +394,8 @@ async function createSshTerminal(event, terminalId, options = {}) {
         terminalId,
         exitCode,
         signal: 0,
-        message: message || ''
+        message: message || '',
+        network
       })
     }
 
@@ -491,14 +492,23 @@ async function createSshTerminal(event, terminalId, options = {}) {
           stream.on('data', forward)
           stream.stderr.on('data', forward)
           stream.on('close', () => {
-            finishExit('SSH 会话已关闭', 0)
+            // 用户输入 exit 时只有 shell 通道关闭，TCP 连接还在；
+            // 断网时 client 的 close/error 会先触发。延迟 300ms 判断更稳。
+            setTimeout(() => {
+              if (ended) return
+              const sock = client._sock
+              const socketAlive = Boolean(
+                sock && !sock.destroyed && sock.readable !== false
+              )
+              finishExit('SSH 会话已关闭', 0, !socketAlive)
+            }, 300)
           })
 
           client.on('close', () => {
-            finishExit('SSH 连接已关闭')
+            finishExit('SSH 连接已关闭', null, true)
           })
           client.on('error', (sshError) => {
-            finishExit(sshError.message || 'SSH 连接异常')
+            finishExit(sshError.message || 'SSH 连接异常', null, true)
           })
 
           resolveOnce({
@@ -531,7 +541,7 @@ async function createSshTerminal(event, terminalId, options = {}) {
         })
         return
       }
-      finishExit(error.message || 'SSH 连接异常')
+      finishExit(error.message || 'SSH 连接异常', null, true)
     })
 
     client.on('close', () => {
@@ -542,7 +552,7 @@ async function createSshTerminal(event, terminalId, options = {}) {
         })
         return
       }
-      finishExit('SSH 连接已关闭')
+      finishExit('SSH 连接已关闭', null, true)
     })
 
     timeout = setTimeout(() => {
@@ -559,8 +569,13 @@ async function createSshTerminal(event, terminalId, options = {}) {
       port,
       username,
       readyTimeout: 60000,
-      keepaliveInterval: 10000,
+      // 更快发现断网：5s 一次心跳，连续 3 次失败判定为断线
+      keepaliveInterval: 5000,
       keepaliveCountMax: 3,
+      // 终端是纯文本，压缩率很高；弱网/移动网络下能明显减少卡顿
+      algorithms: {
+        compress: ['zlib@openssh.com', 'zlib', 'none']
+      },
       tryKeyboard: true,
       hostVerifier: (key, verify) => {
         let parsedKey
@@ -1816,6 +1831,8 @@ async function getLocalSystemStats() {
 
 function sshExec(client, command, timeoutMs = 8000) {
   return new Promise((resolve) => {
+    const startedAt = Date.now()
+    let openedAt = 0
     let settled = false
     let stream = null
     let stdout = ''
@@ -1828,7 +1845,10 @@ function sshExec(client, command, timeoutMs = 8000) {
       } catch {
         // ignore
       }
-      resolve(result)
+      resolve({
+        ...result,
+        latency: openedAt ? openedAt - startedAt : 0
+      })
     }
     const timer = setTimeout(
       () => finish({ ok: false, error: 'timeout', stdout }),
@@ -1836,6 +1856,7 @@ function sshExec(client, command, timeoutMs = 8000) {
     )
     try {
       client.exec(command, (error, nextStream) => {
+        openedAt = Date.now()
         if (settled) return
         if (error) {
           finish({ ok: false, error: error.message, stdout })
@@ -2023,6 +2044,7 @@ async function getSshSystemStats(term) {
     if (!result.ok) throw new Error(result.error || '远端采样失败')
     const data = parseRemoteStats(result.stdout, osType)
     if (!data) throw new Error('远端系统信息格式不支持')
+    data.latency = result.latency || 0
     term.statsCache = { at: Date.now(), data }
     return data
   })().finally(() => {

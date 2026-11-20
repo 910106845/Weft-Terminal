@@ -102,6 +102,12 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M17 4v16M17 20l-4-4M17 20l4-4" />
         </svg>
       )
+    case 'signal':
+      return (
+        <svg {...props}>
+          <path d="M4 20v-4M9.5 20v-7M15 20V9M20.5 20V5" />
+        </svg>
+      )
     case 'clock':
       return (
         <svg {...props}>

@@ -270,6 +270,7 @@ function terminalCommandKey(item) {
 function statusLabel(status) {
   if (status === 'running') return '运行中'
   if (status === 'starting') return '启动中'
+  if (status === 'reconnecting') return '重连中'
   if (status === 'exited') return '已退出'
   if (status === 'error') return '不可用'
   return '等待中'
@@ -306,6 +307,7 @@ function SystemStatsBar({ stats, remote }) {
   const diskPct = Math.round(Number(stats.disk?.percent) || 0)
   const rx = Number(stats.net?.rx) || 0
   const tx = Number(stats.net?.tx) || 0
+  const latency = Math.round(Number(stats.latency) || 0)
   return (
     <div
       className="terminal-system-stats"
@@ -348,6 +350,20 @@ function SystemStatsBar({ stats, remote }) {
         <strong>↓ {formatStatRate(rx)}</strong>
         <strong>↑ {formatStatRate(tx)}</strong>
       </span>
+      {remote && latency > 0 ? (
+        <span
+          className={`sys-stat is-latency ${
+            latency >= 300 ? 'is-hot' : latency >= 150 ? 'is-warn' : ''
+          }`}
+          title={`SSH 往返延迟 ${latency} ms${
+            latency >= 150 ? ' · 网络较慢，终端会自动降低采样频率' : ''
+          }`}
+        >
+          <Icon name="signal" size={12} />
+          <em>延迟</em>
+          <strong>{latency} ms</strong>
+        </span>
+      ) : null}
     </div>
   )
 }
@@ -377,27 +393,42 @@ export default function TerminalPage({
   const [pid, setPid] = useState(null)
   const [size, setSize] = useState({ cols: 80, rows: 24 })
   const [systemStats, setSystemStats] = useState(null)
+  const [reconnectAttempt, setReconnectAttempt] = useState(0)
+  const [offlineInputCount, setOfflineInputCount] = useState(0)
 
   useEffect(() => {
-    if (!active) return undefined
+    if (!active || status !== 'running') return undefined
     let stopped = false
     let timer = null
-    const interval = transport === 'ssh' ? 3000 : 2000
+    const baseInterval = transport === 'ssh' ? 3000 : 2000
+    let slowFactor = 1
     const tick = async () => {
+      if (stopped) return
+      // 正在输入时先不采样，避免和按键/回显抢同一条链路
+      if (Date.now() - lastInputAtRef.current < 1200) {
+        timer = setTimeout(tick, 1200)
+        return
+      }
+      const startedAt = performance.now()
       try {
         const result = await window.terminalAPI?.stats?.(sessionId)
-        if (!stopped && result?.ok) setSystemStats(result)
+        if (!stopped && result?.ok) {
+          setSystemStats(result)
+          const latency = Number(result.latency) || 0
+          slowFactor =
+            latency > 180 || performance.now() - startedAt > 1500 ? 2 : 1
+        }
       } catch {
         // 系统信息不可用时保持上一帧
       }
-      if (!stopped) timer = setTimeout(tick, interval)
+      if (!stopped) timer = setTimeout(tick, baseInterval * slowFactor)
     }
     tick()
     return () => {
       stopped = true
       if (timer) clearTimeout(timer)
     }
-  }, [active, sessionId, transport])
+  }, [active, sessionId, status, transport])
   const [error, setError] = useState('')
   const [exitInfo, setExitInfo] = useState(null)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -449,6 +480,15 @@ export default function TerminalPage({
   const timestampTimerRef = useRef(null)
   const timestampRowHeightRef = useRef(0)
   const toastTimerRef = useRef(null)
+  const lastInputAtRef = useRef(0)
+  const statusRef = useRef(status)
+  const spawnSessionRef = useRef(null)
+  const scheduleReconnectRef = useRef(null)
+  const reconnectRef = useRef({ attempts: 0, timer: null })
+  const offlineToastAtRef = useRef(0)
+  const pendingInputRef = useRef('')
+  const pendingReplayRef = useRef(null)
+  const showToastRef = useRef(null)
   const isMac = window.terminalAPI?.platform === 'darwin'
   const isSsh = transport === 'ssh'
   const commandScopeLabel = isSsh ? 'SSH 指令' : '本地终端指令'
@@ -457,12 +497,14 @@ export default function TerminalPage({
   activeRef.current = active
   themeRef.current = resolvedTheme
   displayRef.current = display
+  statusRef.current = status
 
   const showToast = useCallback((message, kind = 'success') => {
     setToast({ message, kind })
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     toastTimerRef.current = setTimeout(() => setToast(null), 2400)
   }, [])
+  showToastRef.current = showToast
 
   useEffect(() => {
     return () => {
@@ -600,10 +642,12 @@ export default function TerminalPage({
     (delay = 80) => {
       // 不在每次输出时重置计时器，否则持续滚动日志会一直得不到刷新。
       if (logHighlightTimerRef.current) return
+      // 正在打字时把扫描让出去，优先保证按键回显
+      const typing = Date.now() - lastInputAtRef.current < 600
       logHighlightTimerRef.current = setTimeout(() => {
         logHighlightTimerRef.current = null
         applyLogHighlights()
-      }, delay)
+      }, typing ? Math.max(delay, 300) : delay)
     },
     [applyLogHighlights]
   )
@@ -760,10 +804,12 @@ export default function TerminalPage({
   const scheduleTimestampUpdate = useCallback(
     (delay = 60) => {
       if (timestampTimerRef.current) return
+      // 输入时延迟扫描时间戳列，避免每个回显字符都做一次 400 行扫描
+      const typing = Date.now() - lastInputAtRef.current < 600
       timestampTimerRef.current = setTimeout(() => {
         timestampTimerRef.current = null
         updateTimestampLabels()
-      }, delay)
+      }, typing ? Math.max(delay, 500) : delay)
     },
     [updateTimestampLabels]
   )
@@ -994,18 +1040,19 @@ export default function TerminalPage({
     return () => window.removeEventListener('keydown', handler)
   }, [active])
 
-  const spawnSession = useCallback(async () => {
+  const spawnSession = useCallback(async (options = {}) => {
+    const reconnect = Boolean(options?.reconnect)
     const term = termRef.current
-    if (!term) return
+    if (!term) return false
 
     const api = window.terminalAPI
     if (!api) {
       setStatus('error')
       setError('终端接口不可用，请重新启动应用')
-      return
+      return false
     }
 
-    setStatus('starting')
+    setStatus(reconnect ? 'reconnecting' : 'starting')
     setError('')
     setExitInfo(null)
 
@@ -1018,17 +1065,17 @@ export default function TerminalPage({
         if (!sshProfile?.host || !sshProfile?.username) {
           setStatus('error')
           setError('请先配置 SSH 主机和用户名')
-          return
+          return false
         }
         if (sshProfile.authType === 'password' && !sshCredentials?.password) {
           setStatus('error')
           setError('请输入 SSH 密码，或点击“编辑连接”修改认证方式')
-          return
+          return false
         }
         if (sshProfile.authType === 'key' && !sshProfile.privateKeyPath) {
           setStatus('error')
           setError('请选择 SSH 私钥文件，或点击“编辑连接”修改认证方式')
-          return
+          return false
         }
         request.transport = 'ssh'
         request.ssh = {
@@ -1040,27 +1087,96 @@ export default function TerminalPage({
         request.shellId = shellIdRef.current || undefined
       }
       const result = await api.create(sessionId, request)
-      if (!aliveRef.current) return
+      if (!aliveRef.current) return false
       if (!result || !result.ok) {
-        setStatus('error')
-        setError(result?.error || '终端启动失败')
-        return
+        if (!reconnect) {
+          setStatus('error')
+          setError(result?.error || '终端启动失败')
+        }
+        return false
       }
       if (result.shell?.id) shellIdRef.current = result.shell.id
       setShellInfo(result.shell || null)
       setPid(result.pid || null)
       setStatus('running')
+      neutralizeCharset(term)
+      if (reconnect) {
+        reconnectRef.current.attempts = 0
+        setReconnectAttempt(0)
+        const pendingInput = pendingInputRef.current
+        pendingInputRef.current = ''
+        setOfflineInputCount(0)
+        if (pendingInput) {
+          const replay = { text: pendingInput }
+          pendingReplayRef.current = replay
+          // 兜底：如果远端没有输出（极简 shell），1.5s 后仍然填回去
+          setTimeout(() => {
+            if (!aliveRef.current || pendingReplayRef.current !== replay) return
+            pendingReplayRef.current = null
+            window.terminalAPI?.write(sessionId, replay.text)
+            showToastRef.current?.('已恢复连接，断线期间输入已填入（未执行）')
+            term.focus()
+          }, 1500)
+        }
+      }
       scheduleFit()
       // SSH 建立期间发生的尺寸变化可能早于 PTY 创建，这里再同步一次，
       // 避免远端 Shell 的列数与实际终端不一致导致补全/重绘错位。
       window.terminalAPI?.resize(sessionId, term.cols, term.rows)
       term.focus()
+      return true
     } catch (errorValue) {
-      if (!aliveRef.current) return
-      setStatus('error')
-      setError(errorValue.message || '终端启动失败')
+      if (!aliveRef.current) return false
+      if (!reconnect) {
+        setStatus('error')
+        setError(errorValue.message || '终端启动失败')
+      }
+      return false
     }
   }, [scheduleFit, sessionId, sshCredentials, sshProfile, transport])
+
+  spawnSessionRef.current = spawnSession
+
+  const cancelReconnect = useCallback(() => {
+    const state = reconnectRef.current
+    if (state.timer) {
+      clearTimeout(state.timer)
+      state.timer = null
+    }
+    state.attempts = 0
+    pendingInputRef.current = ''
+    setOfflineInputCount(0)
+    setReconnectAttempt(0)
+    setStatus((current) => (current === 'reconnecting' ? 'exited' : current))
+  }, [])
+
+  const scheduleReconnect = useCallback(() => {
+    const state = reconnectRef.current
+    if (state.timer) return
+    const delays = [500, 1000, 2500, 5000, 8000, 12000, 15000]
+    if (state.attempts >= delays.length) {
+      setStatus('error')
+      setError('网络中断，自动重连已停止；请点击“重试”')
+      setReconnectAttempt(0)
+      return
+    }
+    const delay = delays[state.attempts]
+    state.attempts += 1
+    setReconnectAttempt(state.attempts)
+    setStatus('reconnecting')
+    state.timer = setTimeout(async () => {
+      state.timer = null
+      if (!aliveRef.current) return
+      const ok = await spawnSessionRef.current({ reconnect: true })
+      if (ok) {
+        setReconnectAttempt(0)
+        return
+      }
+      scheduleReconnectRef.current()
+    }, delay)
+  }, [])
+
+  scheduleReconnectRef.current = scheduleReconnect
 
   useEffect(() => {
     const container = containerRef.current
@@ -1125,6 +1241,7 @@ export default function TerminalPage({
         ? TUI_TERM_THEME
         : terminalTheme(themeRef.current, displayRef.current.enhanced)
       term.options.minimumContrastRatio = isAlternate ? 4.5 : 1
+      if (!isAlternate) neutralizeCharset(term)
       scheduleFit()
       if (isAlternate) {
         requestAnimationFrame(() => {
@@ -1244,8 +1361,27 @@ export default function TerminalPage({
       return true
     })
 
+    let replayInFlight = null
+    let replayTimer = 0
     const offData = window.terminalAPI?.onData((payload) => {
       if (payload?.terminalId === sessionId) {
+        // 重连成功后先等远端输出安静下来（提示符/MOTD 画完），
+        // 再把断线期间暂存的输入填回命令行，避免 Shell 启动阶段重复回显。
+        if (pendingReplayRef.current) {
+          replayInFlight = pendingReplayRef.current
+          pendingReplayRef.current = null
+        }
+        if (replayInFlight) {
+          if (replayTimer) clearTimeout(replayTimer)
+          replayTimer = setTimeout(() => {
+            const replay = replayInFlight
+            replayInFlight = null
+            if (!aliveRef.current || !replay) return
+            window.terminalAPI?.write(sessionId, replay.text)
+            showToastRef.current?.('已恢复连接，断线期间输入已填入（未执行）')
+            termRef.current?.focus()
+          }, 500)
+        }
         term.write(payload.data)
         if (
           payload.data.length > 24 ||
@@ -1257,6 +1393,19 @@ export default function TerminalPage({
     })
     const offExit = window.terminalAPI?.onExit((payload) => {
       if (!payload || payload.terminalId !== sessionId) return
+      // 网络断开（不是用户输入 exit）：自动重连，保留当前回看内容
+      if (
+        transport === 'ssh' &&
+        payload.network &&
+        statusRef.current === 'running'
+      ) {
+        setExitInfo(payload)
+        term.write(
+          '\r\n\u001b[38;5;108m[网络连接中断 · 正在自动重连…]\u001b[0m\r\n'
+        )
+        scheduleReconnect()
+        return
+      }
       setStatus('exited')
       setExitInfo(payload)
       const code =
@@ -1271,7 +1420,28 @@ export default function TerminalPage({
     })
 
     const dataDisposable = term.onData((data) => {
-      neutralizeCharset(term)
+      lastInputAtRef.current = Date.now()
+      if (transport === 'ssh' && statusRef.current !== 'running') {
+        if (statusRef.current === 'reconnecting') {
+          // 断线期间先暂存可打印字符，重连成功后填回命令行（不自动执行）
+          const printable = data.replace(/[\x00-\x1f\x7f]/g, '')
+          if (printable) {
+            pendingInputRef.current = (
+              pendingInputRef.current + printable
+            ).slice(0, 4000)
+            setOfflineInputCount(pendingInputRef.current.length)
+          }
+          if (Date.now() - offlineToastAtRef.current > 2400) {
+            offlineToastAtRef.current = Date.now()
+            showToastRef.current?.('连接中断，输入已暂存，重连后自动填入', 'error')
+          }
+        } else if (Date.now() - offlineToastAtRef.current > 2400) {
+          offlineToastAtRef.current = Date.now()
+          showToastRef.current?.('连接已断开，输入未发送', 'error')
+        }
+        return
+      }
+      if (data === '\r') neutralizeCharset(term)
       inputTrackerRef.current?.(data)
       window.terminalAPI?.write(sessionId, data)
     })
@@ -1305,6 +1475,7 @@ export default function TerminalPage({
     return () => {
       aliveRef.current = false
       cancelAnimationFrame(frame)
+      if (replayTimer) clearTimeout(replayTimer)
       observer.disconnect()
       window.removeEventListener('resize', onWindowResize)
       window.visualViewport?.removeEventListener('resize', onWindowResize)
@@ -1336,6 +1507,7 @@ export default function TerminalPage({
     fitTerminal,
     scheduleFit,
     scheduleLogHighlights,
+    scheduleReconnect,
     scheduleTimestampUpdate,
     sessionId,
     spawnSession,
@@ -1421,6 +1593,7 @@ export default function TerminalPage({
   const restartTerminal = useCallback(async () => {
     const term = termRef.current
     if (!term) return
+    cancelReconnect()
     resetTerminalSearch()
     clearLogDecorations()
     clearTimestampMarkers()
@@ -1428,6 +1601,7 @@ export default function TerminalPage({
     term.reset()
     await spawnSession()
   }, [
+    cancelReconnect,
     clearLogDecorations,
     clearTimestampMarkers,
     resetTerminalSearch,
@@ -2400,6 +2574,28 @@ export default function TerminalPage({
             ) : null}
           </div>
 
+          {status === 'reconnecting' ? (
+            <div className="terminal-overlay is-soft">
+              <div className="terminal-loading terminal-reconnecting">
+                <span className="terminal-spinner" />
+                <span>
+                  网络中断，正在自动重连…
+                  {reconnectAttempt > 1 ? `（第 ${reconnectAttempt} 次）` : ''}
+                  {offlineInputCount > 0
+                    ? ` · 已暂存 ${offlineInputCount} 个字符`
+                    : ''}
+                </span>
+                <button
+                  type="button"
+                  className="soft-btn terminal-reconnect-cancel"
+                  onClick={cancelReconnect}
+                >
+                  停止重连
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {starting ? (
             <div className="terminal-overlay is-soft">
               <div className="terminal-loading">
@@ -2459,17 +2655,21 @@ export default function TerminalPage({
             ? transport === 'ssh'
               ? `SSH 终端 · ${shellLabel}`
               : `本地终端 · ${shellLabel}`
-            : status === 'exited'
-              ? isSsh
-                ? 'SSH 会话已断开'
-                : '终端已退出'
-              : status === 'error'
+            : status === 'reconnecting'
+              ? `网络中断，正在重连${
+                  reconnectAttempt > 1 ? `（第 ${reconnectAttempt} 次）` : ''
+                }`
+              : status === 'exited'
                 ? isSsh
-                  ? 'SSH 连接失败'
-                  : '终端不可用'
-                : isSsh
-                  ? '正在建立 SSH 连接'
-                  : '正在启动本地终端'}
+                  ? 'SSH 会话已断开'
+                  : '终端已退出'
+                : status === 'error'
+                  ? isSsh
+                    ? 'SSH 连接失败'
+                    : '终端不可用'
+                  : isSsh
+                    ? '正在建立 SSH 连接'
+                    : '正在启动本地终端'}
           {exitInfo && status === 'exited' && transport !== 'ssh' ? (
             <span className="status-exit-code">code {exitInfo.exitCode ?? '未知'}</span>
           ) : null}
