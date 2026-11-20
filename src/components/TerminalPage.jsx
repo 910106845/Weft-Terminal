@@ -2178,6 +2178,7 @@ export default function TerminalPage({
 
           <GlassButton
             size="sm"
+            pill
             className="terminal-library-btn"
             onClick={() => {
               setFilePanelOpen(false)
@@ -2190,37 +2191,38 @@ export default function TerminalPage({
             <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
           </GlassButton>
 
-          <span className="topbar-sep" aria-hidden="true" />
-
           {isSsh ? (
-            <button
-              type="button"
-              className="topbar-btn is-icon"
-              onClick={() => {
-                setLibraryOpen(false)
-                setFilePanelOpen(true)
-              }}
-              title="远程文件管理"
-              aria-label="远程文件管理"
-              disabled={!running}
-            >
-              <Icon name="folder" size={15} />
-            </button>
-          ) : null}
-
-          {isSsh && onEditSsh ? (
-            <button
-              type="button"
-              className="topbar-btn is-icon"
-              onClick={onEditSsh}
-              title="编辑 SSH 连接"
-              aria-label="编辑 SSH 连接"
-            >
-              <Icon name="edit" size={15} />
-            </button>
-          ) : null}
-
-          <span className="topbar-sep" aria-hidden="true" />
+            <>
+              <span className="topbar-sep" aria-hidden="true" />
+              <button
+                type="button"
+                className="topbar-btn is-icon"
+                onClick={() => {
+                  setLibraryOpen(false)
+                  setFilePanelOpen(true)
+                }}
+                title="远程文件管理"
+                aria-label="远程文件管理"
+                disabled={!running}
+              >
+                <Icon name="folder" size={15} />
+              </button>
+              {onEditSsh ? (
+                <button
+                  type="button"
+                  className="topbar-btn is-icon"
+                  onClick={onEditSsh}
+                  title="编辑 SSH 连接"
+                  aria-label="编辑 SSH 连接"
+                >
+                  <Icon name="edit" size={15} />
+                </button>
+              ) : null}
+              <span className="topbar-sep" aria-hidden="true" />
+            </>
+          ) : (
+            <span className="topbar-sep" aria-hidden="true" />
+          )}
 
           <button
             type="button"
@@ -2268,23 +2270,25 @@ export default function TerminalPage({
 
           <button
             type="button"
-            className="topbar-btn"
+            className="topbar-btn is-icon"
             onClick={isSsh ? onNewSsh : onNewTerminal}
             title={isSsh ? '新建 SSH 终端' : '新建本地终端'}
+            aria-label={isSsh ? '新建 SSH 终端' : '新建本地终端'}
           >
-            <Icon name="plus" size={14} />
-            <span>新建</span>
+            <Icon name="plus" size={15} />
           </button>
 
           <div className="terminal-display-wrap" ref={displayMenuRef}>
             <button
               type="button"
-              className={`topbar-btn ${displayMenuOpen ? 'is-active' : ''}`}
+              className={`topbar-btn is-icon ${
+                displayMenuOpen ? 'is-active' : ''
+              }`}
               onClick={() => setDisplayMenuOpen((prev) => !prev)}
               title="终端显示设置"
+              aria-label="终端显示设置"
             >
-              <Icon name="format" size={14} />
-              <span>显示</span>
+              <Icon name="format" size={15} />
             </button>
             {displayMenuOpen ? (
               <div className="terminal-display-menu">

@@ -217,7 +217,7 @@ export default function SendPane({
               </button>
             </div>
             <GlassButton
-              size="lg"
+              size="md"
               className={`liquid-send ${looping ? 'is-stopping' : ''} ${
                 batchRunning ? 'is-batch' : ''
               }`}

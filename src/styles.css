@@ -8471,7 +8471,12 @@ button:focus-visible,
 
 /* 发送按钮沿用布局尺寸，不带旧配色 */
 .liquid-btn.liquid-send {
-  min-width: 136px;
+  min-width: 116px;
+}
+
+.topbar-actions .library-trigger,
+.topbar-actions .terminal-library-btn {
+  margin-left: 2px;
 }
 
 .liquid-btn.liquid-send .liquid-btn-content {

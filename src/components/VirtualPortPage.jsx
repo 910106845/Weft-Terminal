@@ -472,15 +472,17 @@ export default function VirtualPortPage({
           <span className="topbar-sep" aria-hidden="true" />
           <button
             type="button"
-            className="topbar-btn"
+            className="topbar-btn is-icon"
             onClick={() => activePort && createPort(activePort)}
             disabled={!activePort || activeRuntime.status === 'creating'}
-            title="重新创建选中的虚拟串口"
+            title={
+              activeRuntime.status === 'creating'
+                ? '正在重新创建…'
+                : '重新创建选中的虚拟串口'
+            }
+            aria-label="重新创建选中的虚拟串口"
           >
-            <Icon name="refresh" size={14} />
-            <span>
-              {activeRuntime.status === 'creating' ? '创建中…' : '重新创建'}
-            </span>
+            <Icon name="refresh" size={15} />
           </button>
           <span className="topbar-sep" aria-hidden="true" />
           <button

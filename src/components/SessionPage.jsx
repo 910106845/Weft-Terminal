@@ -1425,6 +1425,7 @@ export default function SessionPage({
 
           <GlassButton
             size="sm"
+            pill
             className="library-trigger"
             onClick={openLibrary}
             title="打开指令库 (⌘K)"
@@ -1438,12 +1439,12 @@ export default function SessionPage({
 
           <button
             type="button"
-            className="topbar-btn new-serial-btn"
+            className="topbar-btn is-icon new-serial-btn"
             onClick={onNewSerial}
             title="新建串口工具"
+            aria-label="新建串口工具"
           >
-            <Icon name="plus" size={14} />
-            <span>新建</span>
+            <Icon name="plus" size={15} />
           </button>
 
           <button
