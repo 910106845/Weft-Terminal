@@ -8258,6 +8258,29 @@ button:focus-visible,
   }
 }
 
+/* 宽屏下让“新建会话”模块在剩余空间内垂直居中，
+   并让左右留白随视口增长，避免整组内容挤在左上角。 */
+@media (min-width: 1241px) and (min-height: 761px) {
+  .home-content {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: normal;
+    width: calc(488px + 2 * clamp(56px, 4.6vw, 112px));
+    max-width: 56%;
+    padding: clamp(44px, 6.2vh, 92px) clamp(56px, 4.6vw, 112px);
+    gap: clamp(32px, 4.8vh, 60px);
+  }
+
+  .home-masthead {
+    width: min(100%, 500px);
+  }
+
+  .home-main {
+    align-self: center;
+  }
+}
+
 @media (max-height: 740px) {
   .home-content {
     gap: 28px;
