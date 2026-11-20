@@ -262,14 +262,6 @@ export default function CommandLibrary({
                     </div>
                     <div className="command-actions" onClick={(event) => event.stopPropagation()}>
                       <button
-                        className="icon-btn mini"
-                        onClick={() => onFill(item)}
-                        title="填入发送区"
-                        aria-label="填入发送区"
-                      >
-                        <Icon name="arrow-down" size={13} />
-                      </button>
-                      <button
                         className="icon-btn mini command-send-btn"
                         onClick={() => onSend(item)}
                         disabled={!connected || batchRunning}
