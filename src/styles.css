@@ -401,8 +401,8 @@ button {
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px dashed var(--border-strong);
-  border-radius: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
@@ -4079,10 +4079,7 @@ button:focus-visible,
 }
 
 .tab-add.is-active {
-  border-style: solid;
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .tab-kind {
@@ -6016,16 +6013,16 @@ button:focus-visible,
 }
 
 .tab-add {
-  --btn-bg: transparent;
-  --btn-bg-hover: #ffffff;
-  --btn-bg-active: #edf2f9;
-  --btn-border: #dde4ed;
-  --btn-border-hover: #c7d2e0;
-  --btn-fg: #8d9aab;
-  --btn-fg-hover: #182230;
-  --btn-shadow: none;
-  --btn-shadow-hover: none;
-  --btn-shadow-active: none;
+  --btn-bg: var(--accent-soft);
+  --btn-bg-hover: color-mix(in srgb, var(--accent) 18%, transparent);
+  --btn-bg-active: color-mix(in srgb, var(--accent) 24%, transparent);
+  --btn-border: color-mix(in srgb, var(--accent) 30%, transparent);
+  --btn-border-hover: var(--accent);
+  --btn-fg: var(--accent);
+  --btn-fg-hover: var(--accent-strong);
+  --btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  --btn-shadow-hover: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  --btn-shadow-active: inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 :root[data-theme='dark'] .icon-btn,
@@ -6038,10 +6035,14 @@ button:focus-visible,
 }
 
 :root[data-theme='dark'] .tab-add {
-  --btn-bg-hover: #131b25;
-  --btn-bg-active: #0f1620;
-  --btn-border: #24303f;
-  --btn-border-hover: #33445a;
+  --btn-bg: rgba(77, 155, 255, 0.16);
+  --btn-bg-hover: rgba(77, 155, 255, 0.24);
+  --btn-bg-active: rgba(77, 155, 255, 0.3);
+  --btn-border: rgba(77, 155, 255, 0.28);
+  --btn-border-hover: #4d9bff;
+  --btn-fg: #7bb3ff;
+  --btn-fg-hover: #a3cbff;
+  --btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* 主按钮 */

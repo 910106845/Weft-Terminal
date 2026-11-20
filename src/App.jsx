@@ -1011,7 +1011,7 @@ export default function App() {
             aria-haspopup="menu"
             aria-expanded={addMenuOpen}
           >
-            <Icon name="plus" size={14} />
+            <Icon name="plus" size={16} />
           </button>
 
           {addMenuOpen ? (
@@ -1097,16 +1097,16 @@ export default function App() {
             type="button"
             className={`tab-list-trigger ${tabListOpen ? 'is-active' : ''}`}
             onClick={() => setTabListOpen((prev) => !prev)}
-            title="全部页面列表"
+            title="会话列表"
             aria-haspopup="listbox"
             aria-expanded={tabListOpen}
-            aria-label="全部页面列表"
+            aria-label="会话列表"
           >
             <Icon name="list" size={14} />
             <span className="tab-list-count">{tabs.length}</span>
           </button>
           {tabListOpen ? (
-            <div className="tab-list-menu" role="listbox" aria-label="页面列表">
+            <div className="tab-list-menu" role="listbox" aria-label="会话列表">
               {groupTabs(tabs).map((group) => (
                 <div className="tab-list-group" key={group.id}>
                   <div className="tab-list-group-head">
