@@ -374,6 +374,7 @@ export default function TerminalPage({
   sessionId,
   active,
   accent,
+  statusAccent,
   tagAccent,
   resolvedTheme,
   onToggleTheme,
@@ -2170,6 +2171,7 @@ export default function TerminalPage({
         <div className="topbar-actions terminal-topbar-actions">
           <StatusCapsule
             active={running}
+            accent={statusAccent || accent}
             enabled={active}
             theme={resolvedTheme}
             label={stateText}

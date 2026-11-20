@@ -67,6 +67,7 @@ export default function VirtualPortPage({
   sessionId,
   active,
   accent,
+  statusAccent,
   tagAccent,
   resolvedTheme,
   onToggleTheme
@@ -464,6 +465,7 @@ export default function VirtualPortPage({
         <div className="topbar-actions">
           <StatusCapsule
             active={activeRuntime.status === 'ready'}
+            accent={statusAccent || accent}
             enabled={active}
             theme={resolvedTheme}
             label={statusText}

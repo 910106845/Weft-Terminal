@@ -33,7 +33,10 @@ export default function FavoriteEditor({
     setName(mode === 'edit' ? item?.name || '' : firstLine)
     setText(initialText)
     setEncoding(item?.encoding || currentSend?.encoding || 'hex')
-    setUseCurrent(false)
+    // 已保存「跟随当前」的收藏保持开启；老收藏没有发送参数时也默认开启
+    setUseCurrent(
+      mode === 'edit' && (Boolean(item?.useCurrentSend) || !item?.send)
+    )
     setError('')
   }, [mode, item, defaultText, currentSend?.encoding])
 
@@ -112,11 +115,13 @@ export default function FavoriteEditor({
       {mode === 'edit' ? (
         <div className="editor-sync">
           <Switch
-            label="使用当前发送设置（尾部 / 校验）"
+            label="持续使用当前发送设置（尾部 / 校验）"
             checked={useCurrent}
             onChange={setUseCurrent}
           />
-          <p>关闭时保留收藏时保存的发送参数，仅更新名称、内容与编码。</p>
+          <p>
+            开启后，每次使用这条指令都会采用当前的尾部、校验和字节序设置；关闭时使用收藏时保存的参数。
+          </p>
         </div>
       ) : (
         <p className="form-note">将同时保存当前发送设置中的尾部、校验与字节序参数。</p>

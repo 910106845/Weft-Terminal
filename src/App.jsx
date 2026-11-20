@@ -145,6 +145,30 @@ export function tabTagAccent(tab) {
   return ''
 }
 
+const TAB_SCHEME_DARK_ACCENTS = {
+  ocean: '#60a5fa',
+  forest: '#34d399',
+  amber: '#e0a84a',
+  rose: '#fb7185',
+  violet: '#a78bfa',
+  slate: '#94a3b8'
+}
+
+// 状态胶囊跟随标签左侧强调色（含深浅主题差异）
+function tabStatusAccent(tab, theme) {
+  const dark = theme === 'dark'
+  if (!tab) return dark ? '#4d9bff' : '#2563eb'
+  if (tab.tabAccent) return tab.tabAccent
+  const scheme = tab.tabColorScheme
+  if (scheme && TAB_SCHEME_DARK_ACCENTS[scheme]) {
+    return dark ? TAB_SCHEME_DARK_ACCENTS[scheme] : TAB_SCHEME_ACCENTS[scheme]
+  }
+  if (tab.kind === 'virtual') return dark ? '#a78bfa' : '#7c3aed'
+  if (tab.kind === 'serial') return dark ? '#4d9bff' : '#2563eb'
+  if (tab.terminalType === 'ssh') return dark ? '#aeb8c6' : '#2f343c'
+  return dark ? '#34d399' : '#0f9d78'
+}
+
 export function tabAccentOf(tab) {
   if (!tab) return '#2563eb'
   if (tab.tabAccent) return tab.tabAccent
@@ -1337,6 +1361,7 @@ export default function App() {
                 sessionId={tab.id}
                 active={tab.id === activeTabId}
                 accent={tabAccentOf(tab)}
+                statusAccent={tabStatusAccent(tab, resolvedTheme)}
                 tagAccent={tabTagAccent(tab)}
                 resolvedTheme={resolvedTheme}
                 onToggleTheme={onToggleTheme}
@@ -1346,6 +1371,7 @@ export default function App() {
                 key={`${tab.id}:${tab.sshRevision || 0}`}
                 sessionId={tab.id}
                 accent={tabAccentOf(tab)}
+                statusAccent={tabStatusAccent(tab, resolvedTheme)}
                 tagAccent={tabTagAccent(tab)}
                 active={tab.id === activeTabId}
                 transport={tab.terminalType || 'local'}
@@ -1375,6 +1401,7 @@ export default function App() {
               <SessionPage
                 sessionId={tab.id}
                 accent={tabAccentOf(tab)}
+                statusAccent={tabStatusAccent(tab, resolvedTheme)}
                 tagAccent={tabTagAccent(tab)}
                 active={tab.id === activeTabId}
                 migrateLegacy={Boolean(tab.migrateLegacy)}

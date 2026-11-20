@@ -1,20 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icons'
-import { getChecksumAlgo } from '../lib/checksum'
 import { formatRelativeTime } from '../lib/format'
 
 function itemBadges(item) {
-  const badges = [{ label: (item.encoding || 'hex').toUpperCase(), tone: 'neutral' }]
-  if (item.send?.checksum) {
-    badges.push({
-      label: getChecksumAlgo(item.send.checksumAlgo).label,
-      tone: 'accent'
-    })
-  }
-  if (item.send?.checksum && item.send?.checksumHex) {
-    badges.push({ label: 'HEX 校验', tone: 'neutral' })
-  }
-  return badges
+  return [{ label: (item.encoding || 'hex').toUpperCase(), tone: 'neutral' }]
 }
 
 export default function CommandLibrary({
@@ -272,11 +261,16 @@ export default function CommandLibrary({
                       </div>
                     </div>
                     <div className="command-actions" onClick={(event) => event.stopPropagation()}>
-                      <button className="mini-action" onClick={() => onFill(item)}>
-                        填入
+                      <button
+                        className="icon-btn mini"
+                        onClick={() => onFill(item)}
+                        title="填入发送区"
+                        aria-label="填入发送区"
+                      >
+                        <Icon name="download" size={13} />
                       </button>
                       <button
-                        className="mini-action is-primary"
+                        className="icon-btn mini command-send-btn"
                         onClick={() => onSend(item)}
                         disabled={!connected || batchRunning}
                         title={
@@ -286,9 +280,11 @@ export default function CommandLibrary({
                               ? '立即发送'
                               : '请先打开串口'
                         }
+                        aria-label="立即发送"
                       >
-                        发送
+                        <Icon name="send" size={13} />
                       </button>
+                      <span className="command-action-sep" aria-hidden="true" />
                       <button
                         className="icon-btn mini"
                         onClick={() => onMoveTop(item.id)}

@@ -128,6 +128,7 @@ export default function SessionPage({
   sessionId,
   active,
   accent,
+  statusAccent,
   tagAccent,
   migrateLegacy = false,
   favorites,
@@ -994,8 +995,9 @@ export default function SessionPage({
         showToast('指令已收藏', 'success')
       } else {
         const item = favoriteEditor.item
+        const followCurrent = Boolean(payload.useCurrent)
         const send =
-          payload.useCurrent || !item.send
+          followCurrent || !item.send
             ? pickFavoriteSend({ ...currentSend, encoding: payload.encoding })
             : pickFavoriteSend({ ...item.send, encoding: payload.encoding })
         setFavorites((prev) =>
@@ -1006,12 +1008,18 @@ export default function SessionPage({
                   name: payload.name,
                   text: payload.text,
                   encoding: payload.encoding,
-                  send
+                  send,
+                  useCurrentSend: followCurrent
                 }
               : entry
           )
         )
-        showToast('指令已更新', 'success')
+        showToast(
+          followCurrent
+            ? '指令已更新，将持续使用当前发送设置'
+            : '指令已更新',
+          'success'
+        )
       }
       setFavoriteEditor(null)
     },
@@ -1411,6 +1419,7 @@ export default function SessionPage({
         <div className="topbar-actions">
           <StatusCapsule
             active={connected || connecting}
+            accent={statusAccent || accent}
             enabled={active}
             theme={resolvedTheme}
             label={connecting ? '连接中' : connected ? '已连接' : '未连接'}

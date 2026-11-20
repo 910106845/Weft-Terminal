@@ -1072,7 +1072,8 @@ button {
   gap: 8px;
   height: 34px;
   padding: 0 12px;
-  border: 1px solid var(--border);
+  border: 1px solid
+    color-mix(in srgb, var(--status-accent, var(--border)) 22%, var(--border));
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--text-2);
@@ -3357,7 +3358,7 @@ button:focus-visible,
 
 .command-row-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
@@ -3366,9 +3367,19 @@ button:focus-visible,
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px 8px;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.command-title-group .badge-row {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+.command-title-group .command-name {
+  flex: 1 1 auto;
 }
 
 .command-name {
@@ -3444,9 +3455,30 @@ button:focus-visible,
   flex: none;
   display: flex;
   align-items: center;
-  gap: 3px;
-  opacity: 0.5;
+  gap: 2px;
+  opacity: 0.55;
   transition: opacity 0.15s ease;
+}
+
+.command-send-btn {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.command-send-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.command-send-btn:disabled {
+  color: var(--text-3);
+  background: transparent;
+}
+
+.command-action-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--border);
 }
 
 .command-row:hover .command-actions,
@@ -4973,10 +5005,11 @@ button:focus-visible,
   align-items: center;
   gap: 7px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .terminal-command-top strong {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -6497,14 +6530,17 @@ button:focus-visible,
 }
 
 .status-capsule.is-on {
-  border-color: color-mix(in srgb, var(--mint) 30%, var(--border));
-  background: var(--mint-soft);
-  color: var(--mint);
-}
-
-:root[data-theme='dark'] .status-capsule.is-on {
-  border-color: rgba(52, 211, 153, 0.28);
-  background: rgba(52, 211, 153, 0.1);
+  border-color: color-mix(
+    in srgb,
+    var(--status-accent, var(--mint)) 38%,
+    var(--border)
+  );
+  background: color-mix(
+    in srgb,
+    var(--status-accent, var(--mint)) 12%,
+    var(--surface-2)
+  );
+  color: var(--status-accent, var(--mint));
 }
 
 .status-capsule-dot {
@@ -6516,8 +6552,9 @@ button:focus-visible,
 }
 
 .status-capsule.is-on .status-capsule-dot {
-  background: var(--mint);
-  box-shadow: 0 0 0 2px var(--mint-soft);
+  background: var(--status-accent, var(--mint));
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--status-accent, var(--mint)) 18%, transparent);
 }
 
 .status-capsule-label {
@@ -6704,11 +6741,6 @@ button:focus-visible,
 :root[data-theme='light'] {
   --capsule-meta: #7a8798;
   --capsule-line: rgba(17, 35, 61, 0.12);
-}
-
-:root[data-theme='light'] .status-capsule.is-on .status-capsule-dot {
-  background: #12a97e;
-  box-shadow: 0 0 0 2px rgba(18, 169, 126, 0.14);
 }
 
 .tab-kind.is-virtual {

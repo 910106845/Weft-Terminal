@@ -5,13 +5,16 @@ export default function StatusCapsule({
   label,
   meta,
   title,
-  dotTone = 'neutral'
+  dotTone = 'neutral',
+  accent
 }) {
+  const style = accent ? { '--status-accent': accent } : undefined
   return (
     <span
       className={`status-capsule ${active ? 'is-on' : ''} ${
         dotTone === 'accent' ? 'is-accent' : ''
       }`}
+      style={style}
       role="status"
       title={title}
     >

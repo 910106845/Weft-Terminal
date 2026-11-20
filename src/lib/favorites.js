@@ -43,12 +43,20 @@ export function normalizeFavorites(raw) {
       text: item.text,
       encoding: item.encoding || item.send?.encoding || 'hex',
       send: normalizeSend(item.send),
+      useCurrentSend: item.useCurrentSend === true,
       createdAt: item.createdAt || item.time || Date.now(),
       lastUsedAt: item.lastUsedAt || 0
     }))
 }
 
 export function favoriteSendSettings(item, base = DEFAULT_SETTINGS.send) {
+  // 开启「持续使用当前发送设置」后，每次使用指令都采用当前发送参数
+  if (item?.useCurrentSend) {
+    return {
+      ...base,
+      encoding: item.encoding || base.encoding
+    }
+  }
   const stored = normalizeSend(item.send || {}) || {}
   const checksumAlgo = stored.checksumAlgo || getChecksumAlgo(base.checksumAlgo).value
   return {
@@ -68,6 +76,7 @@ export function createFavoriteRecord({ name, text, encoding, send }) {
     text,
     encoding: encoding || normalized.encoding || 'hex',
     send: normalized,
+    useCurrentSend: false,
     createdAt: Date.now(),
     lastUsedAt: 0
   }
