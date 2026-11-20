@@ -67,7 +67,7 @@ export const DEFAULT_SETTINGS = {
   recv: {
     encoding: 'hex',
     autoNewline: true,
-    interval: 50,
+    interval: 200,
     lineNumbers: true,
     timestamp: false,
     logHighlight: true,

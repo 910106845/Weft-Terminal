@@ -267,7 +267,7 @@ export default function CommandLibrary({
                         title="填入发送区"
                         aria-label="填入发送区"
                       >
-                        <Icon name="download" size={13} />
+                        <Icon name="arrow-down" size={13} />
                       </button>
                       <button
                         className="icon-btn mini command-send-btn"

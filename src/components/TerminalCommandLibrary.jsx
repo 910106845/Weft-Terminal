@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icons'
+import { formatRelativeTime } from '../lib/format'
 
 export default function TerminalCommandLibrary({
   open,
@@ -212,66 +213,76 @@ export default function TerminalCommandLibrary({
                   setDropTarget(null)
                 }}
               >
-                <span className="command-drag terminal-command-drag" title="拖动排序" aria-hidden="true">
+                <span className="command-drag" title="拖动排序" aria-hidden="true">
                   <Icon name="grip" size={14} />
                 </span>
-                <span className="terminal-command-icon">
-                  <Icon name="terminal" size={14} />
-                </span>
-                <div className="terminal-command-main">
-                  <div className="terminal-command-top">
-                    <strong title={item.name}>{item.name}</strong>
-                    {item.lastUsedAt ? (
-                      <span className="terminal-command-used">已使用</span>
-                    ) : null}
+                <div className="command-row-main">
+                  <div className="command-row-top">
+                    <div className="command-title-group">
+                      <span className="command-name" title={item.name}>
+                        {item.name}
+                      </span>
+                      {item.lastUsedAt ? (
+                        <span className="mini-badge is-neutral">已使用</span>
+                      ) : null}
+                    </div>
+                    <div className="command-actions">
+                      <button
+                        type="button"
+                        className="icon-btn mini terminal-run-btn"
+                        title="运行"
+                        aria-label="运行"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onRun(item)
+                        }}
+                      >
+                        <Icon name="play" size={13} />
+                      </button>
+                      <span className="command-action-sep" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className="icon-btn mini"
+                        title="移到最顶部"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onMoveTop(item.id)
+                        }}
+                      >
+                        <Icon name="move-top" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn mini"
+                        title="编辑"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onEdit(item)
+                        }}
+                      >
+                        <Icon name="edit" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn mini is-danger"
+                        title="删除"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onDelete(item)
+                        }}
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </div>
                   </div>
-                  <code title={item.command}>{item.command}</code>
-                </div>
-                <div className="terminal-command-actions">
-                  <button
-                    type="button"
-                    className="icon-btn mini"
-                    title="运行"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onRun(item)
-                    }}
-                  >
-                    <Icon name="play" size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn mini"
-                    title="移到最顶部"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onMoveTop(item.id)
-                    }}
-                  >
-                    <Icon name="move-top" size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn mini"
-                    title="编辑"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onEdit(item)
-                    }}
-                  >
-                    <Icon name="edit" size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn mini is-danger"
-                    title="删除"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onDelete(item)
-                    }}
-                  >
-                    <Icon name="trash" size={12} />
-                  </button>
+                  <pre className="command-preview" title={item.command}>
+                    {item.command}
+                  </pre>
+                  <span className="command-used">
+                    {item.lastUsedAt
+                      ? formatRelativeTime(item.lastUsedAt)
+                      : '未使用'}
+                  </span>
                 </div>
               </div>
             ))

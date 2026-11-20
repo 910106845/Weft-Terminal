@@ -1035,7 +1035,7 @@ export default function App() {
             aria-haspopup="menu"
             aria-expanded={addMenuOpen}
           >
-            <Icon name="plus" size={16} />
+            <Icon name="tab-plus" size={16} />
           </button>
 
           {addMenuOpen ? (

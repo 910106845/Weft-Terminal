@@ -340,6 +340,13 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
         </svg>
       )
+    case 'tab-plus':
+      return (
+        <svg {...props}>
+          <path d="M4 8a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" />
+          <path d="M12 11v6M9 14h6" />
+        </svg>
+      )
     case 'home':
       return (
         <svg {...props}>
