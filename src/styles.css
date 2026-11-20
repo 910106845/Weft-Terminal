@@ -8096,7 +8096,8 @@ button:focus-visible,
   border-bottom-width: 1px;
 }
 
-.tab-home {
+.tab-home,
+.tab-new-window {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -8114,7 +8115,8 @@ button:focus-visible,
     color 0.15s ease;
 }
 
-.tab-home:hover {
+.tab-home:hover,
+.tab-new-window:hover {
   border-color: var(--border-strong);
   color: var(--text);
 }

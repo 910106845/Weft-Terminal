@@ -1002,6 +1002,96 @@ export default function App() {
           <Icon name="home" size={15} />
         </button>
 
+        <div className="tab-add-wrap" ref={addMenuWrapRef}>
+          <button
+            type="button"
+            className={`tab-add ${addMenuOpen ? 'is-active' : ''}`}
+            onClick={toggleAddMenu}
+            title="新建会话"
+            aria-haspopup="menu"
+            aria-expanded={addMenuOpen}
+          >
+            <Icon name="plus" size={14} />
+          </button>
+
+          {addMenuOpen ? (
+            <div
+              className={`new-session-menu ${
+                addMenuAlign === 'right' ? 'align-right' : ''
+              }`}
+              role="menu"
+            >
+              <div className="new-session-head">新建会话</div>
+              <button
+                type="button"
+                className="new-session-option is-serial"
+                onClick={() => addTab('serial')}
+                role="menuitem"
+              >
+                <span className="new-session-icon is-serial">
+                  <Icon name="plug" size={15} />
+                </span>
+                <span className="new-session-copy">
+                  <strong>串口工具</strong>
+                  <small>串口连接、收发与日志</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="new-session-option is-local"
+                onClick={() => addTab('terminal')}
+                role="menuitem"
+              >
+                <span className="new-session-icon is-terminal">
+                  <Icon name="terminal" size={15} />
+                </span>
+                <span className="new-session-copy">
+                  <strong>本地终端</strong>
+                  <small>本机 Shell，命令与脚本</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="new-session-option is-ssh"
+                onClick={openNewSsh}
+                role="menuitem"
+              >
+                <span className="new-session-icon is-ssh">
+                  <Icon name="server" size={15} />
+                </span>
+                <span className="new-session-copy">
+                  <strong>SSH 终端</strong>
+                  <small>远程 Shell 与文件管理</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="new-session-option is-virtual"
+                onClick={() => addTab('virtual')}
+                role="menuitem"
+              >
+                <span className="new-session-icon is-virtual">
+                  <Icon name="bolt" size={15} />
+                </span>
+                <span className="new-session-copy">
+                  <strong>虚拟串口</strong>
+                  <small>创建串口对，供第三方程序互通</small>
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <button
+          type="button"
+          className="tab-new-window"
+          onClick={openNewWindow}
+          title="新建窗口 (⌘N / Ctrl+N)"
+          aria-label="新建窗口"
+        >
+          <Icon name="window-plus" size={14} />
+        </button>
+
         <div className="tab-list-wrap" ref={tabListWrapRef}>
           <button
             type="button"
@@ -1179,96 +1269,7 @@ export default function App() {
           ))}
         </div>
 
-        <div className="tab-add-wrap" ref={addMenuWrapRef}>
-          <button
-            type="button"
-            className={`tab-add ${addMenuOpen ? 'is-active' : ''}`}
-            onClick={toggleAddMenu}
-            title="新建会话"
-            aria-haspopup="menu"
-            aria-expanded={addMenuOpen}
-          >
-            <Icon name="plus" size={14} />
-          </button>
-
-          {addMenuOpen ? (
-            <div
-              className={`new-session-menu ${
-                addMenuAlign === 'right' ? 'align-right' : ''
-              }`}
-              role="menu"
-            >
-              <div className="new-session-head">新建会话</div>
-              <button
-                type="button"
-                className="new-session-option is-serial"
-                onClick={() => addTab('serial')}
-                role="menuitem"
-              >
-                <span className="new-session-icon is-serial">
-                  <Icon name="plug" size={15} />
-                </span>
-                <span className="new-session-copy">
-                  <strong>串口工具</strong>
-                  <small>串口连接、收发与日志</small>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="new-session-option is-local"
-                onClick={() => addTab('terminal')}
-                role="menuitem"
-              >
-                <span className="new-session-icon is-terminal">
-                  <Icon name="terminal" size={15} />
-                </span>
-                <span className="new-session-copy">
-                  <strong>本地终端</strong>
-                  <small>本机 Shell，命令与脚本</small>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="new-session-option is-ssh"
-                onClick={openNewSsh}
-                role="menuitem"
-              >
-                <span className="new-session-icon is-ssh">
-                  <Icon name="server" size={15} />
-                </span>
-                <span className="new-session-copy">
-                  <strong>SSH 终端</strong>
-                  <small>远程 Shell 与文件管理</small>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="new-session-option is-virtual"
-                onClick={() => addTab('virtual')}
-                role="menuitem"
-              >
-                <span className="new-session-icon is-virtual">
-                  <Icon name="bolt" size={15} />
-                </span>
-                <span className="new-session-copy">
-                  <strong>虚拟串口</strong>
-                  <small>创建串口对，供第三方程序互通</small>
-                </span>
-              </button>
-            </div>
-          ) : null}
-        </div>
-
         <div className="tab-strip-actions">
-          <button
-            type="button"
-            className="tab-action"
-            onClick={openNewWindow}
-            title="新建窗口 (⌘N / Ctrl+N)"
-          >
-            <Icon name="window-plus" size={14} />
-            <span>新建窗口</span>
-          </button>
           {platform === 'win32' ? (
             <div className="app-menu-wrap" ref={menuWrapRef}>
               <button
