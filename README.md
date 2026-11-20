@@ -1,6 +1,6 @@
 # Weft Terminal
 
-**WEAVE EVERY CONNECTION** — 串口 · 本地终端 · SSH · 虚拟串口，一个工作台。
+**WEAVE EVERY CONNECTION** — 串口调试工具 · 本地终端 · SSH终端 · 虚拟串口，工作台，绿色安全，连接数据本地化处理。
 
 ![Weft Terminal](docs/weft-terminal.png)
 
@@ -64,7 +64,3 @@ npm run dist      # 打包安装包（macOS dmg / Windows nsis）
 ## 数据目录
 
 应用数据目录为 `Weft Terminal`（macOS 下是 `~/Library/Application Support/Weft Terminal`）。
-
-从旧版本升级时，首次启动会自动迁移旧目录 `serial-debug` 里的 `Local Storage` 和 `ssh-known-hosts.json`，迁移完成后写入标记 `.migrated-from-serial-debug`，不会重复执行；旧目录会保留作为备份。
-
-> 迁移前请先退出正在运行的旧版本，避免复制到一半的 localStorage。
