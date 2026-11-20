@@ -276,12 +276,12 @@ function statusLabel(status) {
 }
 
 
-function formatStatBytes(value) {
+function formatStatBytes(value, base = 1024) {
   const n = Math.max(0, Number(value) || 0)
-  if (n >= 1024 ** 4) return `${(n / 1024 ** 4).toFixed(1)} TB`
-  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`
-  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(0)} MB`
-  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`
+  if (n >= base ** 4) return `${(n / base ** 4).toFixed(1)} TB`
+  if (n >= base ** 3) return `${(n / base ** 3).toFixed(1)} GB`
+  if (n >= base ** 2) return `${(n / base ** 2).toFixed(0)} MB`
+  if (n >= base) return `${(n / base).toFixed(0)} KB`
   return `${Math.round(n)} B`
 }
 
@@ -328,9 +328,13 @@ function SystemStatsBar({ stats, remote }) {
       </span>
       <span
         className={`sys-stat ${sysLevel(diskPct)}`}
-        title={`磁盘 已用 ${formatStatBytes(stats.disk?.used)} · 可用 ${formatStatBytes(
-          stats.disk?.available
-        )} · 共 ${formatStatBytes(stats.disk?.total)}`}
+        title={`磁盘 已用 ${formatStatBytes(
+          stats.disk?.used,
+          stats.disk?.base
+        )} · 可用 ${formatStatBytes(
+          stats.disk?.available,
+          stats.disk?.base
+        )} · 共 ${formatStatBytes(stats.disk?.total, stats.disk?.base)}`}
       >
         <Icon name="disk" size={12} />
         <em>磁盘</em>

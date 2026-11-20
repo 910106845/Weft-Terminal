@@ -1728,6 +1728,61 @@ function pickLocalDisk(list) {
   )
 }
 
+// 磁盘口径：
+// - macOS 用 APFS 容器统计（Finder / 关于本机 / diskutil 的口径），并按十进制 GB 显示
+// - Linux 用 df 口径（used / (used + available)，含 root 保留块差异），按二进制 GiB 显示
+// - Windows 用资源管理器口径（已用 / 总容量），按十进制 GB 显示
+let localDiskCache = null
+
+async function readLocalDisk(fallbackDisk) {
+  if (process.platform === 'darwin') {
+    const now = Date.now()
+    if (localDiskCache && now - localDiskCache.at < 5000) {
+      return localDiskCache.data
+    }
+    // Electron 内置 Node 18.14 还没有 fs.statfsSync，改用 diskutil 的 APFS 容器信息
+    const { error, stdout } = await execFileAsync('diskutil', ['info', '-plist', '/'])
+    if (!error) {
+      const total = Number(
+        /<key>APFSContainerSize<\/key>\s*<integer>(\d+)<\/integer>/.exec(stdout)?.[1]
+      )
+      const free = Number(
+        /<key>APFSContainerFree<\/key>\s*<integer>(\d+)<\/integer>/.exec(stdout)?.[1]
+      )
+      if (total > 0 && Number.isFinite(free)) {
+        const used = Math.max(0, total - free)
+        const data = {
+          used,
+          available: free,
+          total,
+          percent: percentOf(used, used + free),
+          base: 1000
+        }
+        localDiskCache = { at: now, data }
+        return data
+      }
+    }
+  }
+  const disk = fallbackDisk
+  const total = Number(disk?.size) || 0
+  const used = Number(disk?.used) || 0
+  const available = Number.isFinite(disk?.available)
+    ? Number(disk.available)
+    : Math.max(0, total - used)
+  const isWindows = process.platform === 'win32'
+  return {
+    used,
+    available,
+    total,
+    percent: isWindows
+      ? percentOf(used, total)
+      : Number.isFinite(disk?.use)
+        ? round1(disk.use)
+        : percentOf(used, used + available),
+    base: isWindows ? 1000 : 1024
+  }
+}
+
 async function getLocalSystemStats() {
   const now = Date.now()
   if (localStatsCache && now - localStatsCache.at < 1500) {
@@ -1745,11 +1800,6 @@ async function getLocalSystemStats() {
   const memTotal = Number(mem.total) || 0
   const memAvailable = Number.isFinite(mem.available) ? mem.available : mem.free
   const memUsed = Math.max(0, memTotal - (Number(memAvailable) || 0))
-  const diskTotal = Number(disk?.size) || 0
-  const diskUsed = Number(disk?.used) || 0
-  const diskAvailable = Number.isFinite(disk?.available)
-    ? Number(disk.available)
-    : Math.max(0, diskTotal - diskUsed)
   const data = {
     cpu: round1(load.currentLoad),
     mem: {
@@ -1757,13 +1807,7 @@ async function getLocalSystemStats() {
       total: memTotal,
       percent: percentOf(memUsed, memTotal)
     },
-    disk: {
-      used: diskUsed,
-      available: diskAvailable,
-      total: diskTotal,
-      // 与 df 的 Use% 一致：used / (used + available)，不含 root 保留块
-      percent: percentOf(diskUsed, diskUsed + diskAvailable)
-    },
+    disk: await readLocalDisk(disk),
     net
   }
   localStatsCache = { at: now, data }
@@ -1836,7 +1880,12 @@ mem=$(vm_stat | awk -v ps=$(sysctl -n hw.pagesize) -v total=$(sysctl -n hw.memsi
   /Pages wired down/ {w=$NF}
   /Pages occupied by compressor/ {c=$NF}
   END {gsub(/[^0-9]/,"",a); gsub(/[^0-9]/,"",w); gsub(/[^0-9]/,"",c); printf "%d %d", total, (a+w+c)*ps}')
-disk=$(df -kP /System/Volumes/Data 2>/dev/null | awk 'NR==2{p=$5; gsub("%","",p); printf "%d %d %d %s", $2*1024, $3*1024, $4*1024, p}')
+info=$(diskutil info -plist / 2>/dev/null)
+t=$(printf '%s\n' "$info" | awk '/<key>APFSContainerSize<\/key>/{getline; gsub(/[^0-9]/,""); print; exit}')
+f=$(printf '%s\n' "$info" | awk '/<key>APFSContainerFree<\/key>/{getline; gsub(/[^0-9]/,""); print; exit}')
+disk=''
+[ -n "$t" ] && [ -n "$f" ] && disk=$(awk -v t="$t" -v f="$f" 'BEGIN{printf "%d %d %d %.0f", t, t-f, f, (t-f)/t*100}')
+[ -z "$disk" ] && disk=$(df -kP /System/Volumes/Data 2>/dev/null | awk 'NR==2{p=$5; gsub("%","",p); printf "%d %d %d %s", $2*1024, $3*1024, $4*1024, p}')
 [ -z "$disk" ] && disk=$(df -kP / | awk 'NR==2{p=$5; gsub("%","",p); printf "%d %d %d %s", $2*1024, $3*1024, $4*1024, p}')
 n1=$(netstat -ibn | awk '!seen[$1]++ && $1 !~ /^lo/ && $7 ~ /^[0-9]+$/ {rx+=$7; tx+=$10} END{printf "%d %d", rx, tx}')
 sleep 0.25
@@ -1861,7 +1910,8 @@ $rx = (Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface | Measure-
 $tx = (Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface | Measure-Object BytesSentPersec -Sum).Sum
 Write-Output "$cpu|$mt|$mu|$dt|$du|$rx|$tx"`
 
-function parseRemoteStats(stdout) {
+function parseRemoteStats(stdout, osType) {
+  const diskBase = osType === 'linux' ? 1024 : 1000
   const lines = String(stdout || '')
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -1923,6 +1973,7 @@ function parseRemoteStats(stdout) {
         used: diskUsed,
         available: diskAvailable,
         total: diskTotal,
+        base: diskBase,
         percent: Number.isFinite(diskPercent)
           ? diskPercent
           : percentOf(diskUsed, diskUsed + diskAvailable)
@@ -1970,7 +2021,7 @@ async function getSshSystemStats(term) {
     }
     const result = await sshExec(term.client, command, 10000)
     if (!result.ok) throw new Error(result.error || '远端采样失败')
-    const data = parseRemoteStats(result.stdout)
+    const data = parseRemoteStats(result.stdout, osType)
     if (!data) throw new Error('远端系统信息格式不支持')
     term.statsCache = { at: Date.now(), data }
     return data
