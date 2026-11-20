@@ -1,4 +1,4 @@
-import { Component, Suspense, lazy, useEffect, useState } from 'react'
+import { Component, Suspense, lazy, useEffect, useRef, useState } from 'react'
 import BrandMark from './BrandMark'
 import GridScan from './GridScan'
 import Icon from './Icons'
@@ -67,8 +67,9 @@ class SceneBoundary extends Component {
   }
 }
 
-function SceneBackdrop() {
+function SceneBackdrop({ onSceneReady }) {
   const [ready, setReady] = useState(false)
+  const containerRef = useRef(null)
 
   useEffect(() => {
     if (ready) return undefined
@@ -78,6 +79,7 @@ function SceneBackdrop() {
 
   return (
     <div
+      ref={containerRef}
       className={`home-spline ${ready ? 'is-ready' : ''}`}
       aria-hidden="true"
     >
@@ -93,9 +95,12 @@ function SceneBackdrop() {
                 if (mixer && Number.isFinite(mixer.timeScale)) {
                   mixer.timeScale = 1.3
                 }
+                // 让机器人跟随整个首页的鼠标移动，而不仅是右侧画布区域
+                app?.setGlobalEvents?.(true)
               } catch {
                 // 场景结构变化时保持原速
               }
+              onSceneReady?.(containerRef.current?.querySelector('canvas'))
               setReady(true)
             }}
           />
@@ -122,6 +127,46 @@ export default function HomePage({
     onNewVirtual
   }
   const dark = resolvedTheme === 'dark'
+  const heroRef = useRef(null)
+  const [sceneCanvas, setSceneCanvas] = useState(null)
+
+  // Spline 的事件默认只绑定在右侧画布上，这里把首页范围内的鼠标移动
+  // 转发给画布，让机器人可以跟随整个首页（包括左侧“新建会话”区域）。
+  useEffect(() => {
+    const hero = heroRef.current
+    if (!hero || !sceneCanvas) return undefined
+    let frame = 0
+    let pending = null
+    const flush = () => {
+      frame = 0
+      if (!pending) return
+      const event = pending
+      pending = null
+      if (event.target === sceneCanvas) return
+      sceneCanvas.dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          cancelable: true,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          screenX: event.screenX,
+          screenY: event.screenY,
+          buttons: event.buttons,
+          pointerType: event.pointerType || 'mouse'
+        })
+      )
+    }
+    const onMove = (event) => {
+      if (event.target === sceneCanvas) return
+      pending = event
+      if (!frame) frame = requestAnimationFrame(flush)
+    }
+    hero.addEventListener('pointermove', onMove, { passive: true })
+    return () => {
+      hero.removeEventListener('pointermove', onMove)
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [sceneCanvas])
 
   return (
     <div className="app home-page">
@@ -163,7 +208,11 @@ export default function HomePage({
       {/*</header>*/}
 
       <div className="home-stage">
-        <section className="home-hero" aria-label="Weft Terminal 首页">
+        <section
+          ref={heroRef}
+          className="home-hero"
+          aria-label="Weft Terminal 首页"
+        >
           <div className="home-scan" aria-hidden="true">
             <GridScan
               className="home-gridscan"
@@ -189,13 +238,8 @@ export default function HomePage({
             />
           </div>
 
-          <SceneBackdrop />
+          <SceneBackdrop onSceneReady={setSceneCanvas} />
           <div className="home-scrim" aria-hidden="true" />
-
-          <span className="home-reg home-reg-tl" aria-hidden="true" />
-          <span className="home-reg home-reg-tr" aria-hidden="true" />
-          <span className="home-reg home-reg-bl" aria-hidden="true" />
-          <span className="home-reg home-reg-br" aria-hidden="true" />
 
           <div className="home-content">
             <div className="home-masthead">

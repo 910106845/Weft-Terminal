@@ -7645,23 +7645,23 @@ button:focus-visible,
 /* ---------- Home ---------- */
 
 .home-page {
-  --home-bg: #f2f5f9;
+  --home-bg: transparent;
   --home-fg: #0d1826;
   --home-muted: #5f7085;
   --home-line: rgba(13, 24, 38, 0.11);
   --home-line-soft: rgba(13, 24, 38, 0.05);
-  --home-scrim: rgba(242, 245, 249, 0.9);
-  --home-scrim-mid: rgba(242, 245, 249, 0.44);
+  --home-scrim: rgba(238, 242, 247, 0.9);
+  --home-scrim-mid: rgba(238, 242, 247, 0.44);
 }
 
 :root[data-theme='dark'] .home-page {
-  --home-bg: #05080e;
+  --home-bg: transparent;
   --home-fg: #eef4fc;
   --home-muted: #94a5ba;
   --home-line: rgba(158, 186, 220, 0.16);
   --home-line-soft: rgba(158, 186, 220, 0.07);
-  --home-scrim: rgba(5, 8, 14, 0.86);
-  --home-scrim-mid: rgba(5, 8, 14, 0.4);
+  --home-scrim: rgba(9, 13, 19, 0.88);
+  --home-scrim-mid: rgba(9, 13, 19, 0.42);
 }
 
 .home-topbar {
@@ -7701,7 +7701,6 @@ button:focus-visible,
   flex: 1;
   min-height: 0;
   display: flex;
-  padding: 5px;
 }
 
 .home-hero {
@@ -7711,11 +7710,11 @@ button:focus-visible,
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--home-bg);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--home-fg);
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
 }
 
 .home-scan {
@@ -8074,43 +8073,6 @@ button:focus-visible,
   flex: 1;
   height: 1px;
   background: var(--home-line);
-}
-
-.home-reg {
-  position: absolute;
-  z-index: 3;
-  width: 13px;
-  height: 13px;
-  border: 0 solid var(--home-line);
-  pointer-events: none;
-}
-
-.home-reg-tl {
-  top: 12px;
-  left: 12px;
-  border-top-width: 1px;
-  border-left-width: 1px;
-}
-
-.home-reg-tr {
-  top: 12px;
-  right: 12px;
-  border-top-width: 1px;
-  border-right-width: 1px;
-}
-
-.home-reg-bl {
-  bottom: 12px;
-  left: 12px;
-  border-bottom-width: 1px;
-  border-left-width: 1px;
-}
-
-.home-reg-br {
-  right: 12px;
-  bottom: 12px;
-  border-right-width: 1px;
-  border-bottom-width: 1px;
 }
 
 .tab-home,
