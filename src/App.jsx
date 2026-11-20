@@ -299,7 +299,7 @@ export default function App() {
     [],
     normalizeSshProfiles
   )
-  const [themePref, setThemePref] = useSharedString('serialdebug.theme', 'system')
+  const [themePref, setThemePref] = useSharedString('serialdebug.theme', 'dark')
   const [resolvedTheme, setResolvedTheme] = useState('light')
 
   const [initialSession] = useState(() => {
