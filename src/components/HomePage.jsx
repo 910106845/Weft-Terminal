@@ -168,21 +168,21 @@ export default function HomePage({
             <GridScan
               className="home-gridscan"
               linesColor={dark ? '#30445c' : '#d3dce8'}
-              scanColor={dark ? '#5fc8ff' : '#2563eb'}
+              scanColor="#040420"
               cells={10}
               lineThickness={1}
-              depth={3}
+              depth={3.1}
               depthFade={0.72}
-              parallax={0.8}
+              parallax={0}
               reflection={0.28}
-              shading={0.65}
-              scanDuration={2.6}
+              shading={0.44}
+              scanDuration={3.5}
               scanDelay={1.1}
-              trail={0.5}
+              trail={0.39}
               glow={dark ? 0.7 : 0.42}
               autoScan
-              interactive
-              clickEffect="ping"
+              interactive={false}
+              clickEffect="none"
               intro
               lightMode={!dark}
               dpr={Math.min(window.devicePixelRatio || 1, 1.75)}
@@ -212,17 +212,17 @@ export default function HomePage({
                   edgeBend={0.72}
                   angle={70}
                   speed={0.9}
-                  scale={0.78}
+                  scale={1}
                   mouseTilt={0.35}
                   intro
                 />
               </div>
               <span className="home-tagline">WEAVE EVERY CONNECTION</span>
+              <span className="home-rule" aria-hidden="true" />
             </div>
 
-            <span className="home-rule" aria-hidden="true" />
-
-            <div className="home-head">
+            <div className="home-main">
+              <div className="home-head">
               <span className="home-eyebrow">
                 <span className="home-eyebrow-dot" />
                 NEW SESSION
@@ -260,11 +260,12 @@ export default function HomePage({
               ))}
             </div>
 
-            <p className="home-foot">
-              {tabsCount > 0
-                ? '已有标签页，点击上方标签即可继续。'
-                : '所有会话已关闭，从上面选择一个入口开始。'}
-            </p>
+              <p className="home-foot">
+                {tabsCount > 0
+                  ? '已有标签页，点击上方标签即可继续。'
+                  : '所有会话已关闭，从上面选择一个入口开始。'}
+              </p>
+            </div>
           </div>
 
           <div className="home-meta" aria-hidden="true">

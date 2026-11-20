@@ -205,7 +205,12 @@ button {
   cursor: pointer;
   box-shadow: inset 3px 0 0
     var(--tab-accent, var(--tab-kind-accent, var(--text-3)));
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
 .tab-card:hover {
@@ -250,12 +255,36 @@ button {
 }
 
 .tab-card.is-active {
-  border-color: var(--tab-accent, var(--tab-kind-accent, var(--accent)));
+  --active-accent: var(
+    --tab-accent,
+    var(--tab-kind-accent, var(--accent))
+  );
+  border-color: var(--active-accent);
   background: var(
     --tab-bg,
     var(--tab-soft, var(--tab-kind-soft, var(--accent-soft)))
   );
   color: var(--tab-fg, var(--tab-accent, var(--tab-kind-accent, var(--accent))));
+  font-weight: 600;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 3px 0 0 var(--active-accent),
+    0 0 0 1px var(--active-accent),
+    0 7px 18px -10px var(--tab-soft, rgba(8, 20, 38, 0.35));
+}
+
+.tab-card.is-active::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--active-accent);
+  box-shadow: 0 0 9px
+    color-mix(in srgb, var(--active-accent) 55%, transparent);
+  pointer-events: none;
 }
 
 .tab-card[draggable='true'] {
@@ -7692,29 +7721,38 @@ button:focus-visible,
 .home-masthead {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: min(100%, 400px);
+  gap: 8px;
+  width: min(100%, 460px);
 }
 
 .home-wordmark {
   width: 100%;
-  height: 62px;
+  height: 78px;
+  margin-left: -1.9%;
 }
 
 .home-tagline {
   color: var(--home-muted);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 500;
   letter-spacing: 0.3em;
-  opacity: 0.8;
+  opacity: 0.82;
 }
 
 .home-rule {
   display: block;
   width: 100%;
   height: 1px;
+  margin-top: 8px;
   background: var(--home-line);
+}
+
+.home-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
 }
 
 .home-spline {
@@ -7763,8 +7801,8 @@ button:focus-visible,
   padding: clamp(26px, 4.2vw, 56px);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 18px;
+  justify-content: flex-start;
+  gap: 52px;
 }
 
 .home-head {
@@ -8235,17 +8273,17 @@ button:focus-visible,
   }
 
   .home-masthead {
-    width: min(100%, 340px);
+    width: min(100%, 400px);
   }
 
   .home-wordmark {
-    height: 54px;
+    height: 68px;
   }
 }
 
 @media (max-height: 740px) {
   .home-content {
-    gap: 16px;
+    gap: 28px;
     padding: 22px 30px;
   }
 
@@ -8254,15 +8292,15 @@ button:focus-visible,
   }
 
   .home-masthead {
-    width: 300px;
+    width: 340px;
   }
 
   .home-wordmark {
-    height: 46px;
+    height: 56px;
   }
 
-  .home-rule {
-    display: none;
+  .home-tagline {
+    font-size: 8px;
   }
 
   .home-action {
