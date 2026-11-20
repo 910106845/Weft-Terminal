@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icons'
-import { TAIL_OPTIONS } from '../lib/defaults'
 import { getChecksumAlgo } from '../lib/checksum'
 import { formatRelativeTime } from '../lib/format'
-
-function tailLabel(value) {
-  return TAIL_OPTIONS.find((option) => option.value === value)?.label.replace(/\s*\(.*\)/, '') || 'CRLF'
-}
 
 function itemBadges(item) {
   const badges = [{ label: (item.encoding || 'hex').toUpperCase(), tone: 'neutral' }]
@@ -15,9 +10,6 @@ function itemBadges(item) {
       label: getChecksumAlgo(item.send.checksumAlgo).label,
       tone: 'accent'
     })
-  }
-  if (item.send?.appendTail) {
-    badges.push({ label: tailLabel(item.send.tail), tone: 'neutral' })
   }
   if (item.send?.checksum && item.send?.checksumHex) {
     badges.push({ label: 'HEX 校验', tone: 'neutral' })
