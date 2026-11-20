@@ -3372,9 +3372,15 @@ button:focus-visible,
 }
 
 .command-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
   font-size: 12.5px;
   font-weight: 650;
-  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .badge-row {
@@ -3417,15 +3423,16 @@ button:focus-visible,
 }
 
 .command-preview {
-  max-height: 56px;
+  max-width: 100%;
   margin: 6px 0 5px;
   overflow: hidden;
   color: var(--text-2);
   font-family: var(--font-mono);
   font-size: 10.5px;
   line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-all;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .command-used {
@@ -4969,6 +4976,9 @@ button:focus-visible,
 }
 
 .terminal-command-top strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   color: var(--text);
   font-size: 11.5px;
@@ -4989,7 +4999,7 @@ button:focus-visible,
 
 .terminal-command-main code {
   display: block;
-  max-height: 54px;
+  max-width: 100%;
   overflow: hidden;
   margin-top: 5px;
   padding: 6px 8px;
@@ -4999,8 +5009,9 @@ button:focus-visible,
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .terminal-command-actions {

@@ -257,7 +257,9 @@ export default function CommandLibrary({
                           onChange={() => toggleSelected(item.id)}
                         />
                       </label>
-                      <span className="command-name">{item.name}</span>
+                      <span className="command-name" title={item.name}>
+                        {item.name}
+                      </span>
                       <div className="badge-row">
                         {itemBadges(item).map((badge) => (
                           <span className={`mini-badge is-${badge.tone}`} key={badge.label}>
@@ -306,7 +308,12 @@ export default function CommandLibrary({
                       </button>
                     </div>
                   </div>
-                  <pre className="command-preview">{item.text}</pre>
+                  <pre
+                    className="command-preview"
+                    title={item.text}
+                  >
+                    {item.text}
+                  </pre>
                   <span className="command-used">{formatRelativeTime(item.lastUsedAt)}</span>
                 </div>
               </div>

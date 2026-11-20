@@ -220,12 +220,12 @@ export default function TerminalCommandLibrary({
                 </span>
                 <div className="terminal-command-main">
                   <div className="terminal-command-top">
-                    <strong>{item.name}</strong>
+                    <strong title={item.name}>{item.name}</strong>
                     {item.lastUsedAt ? (
                       <span className="terminal-command-used">已使用</span>
                     ) : null}
                   </div>
-                  <code>{item.command}</code>
+                  <code title={item.command}>{item.command}</code>
                 </div>
                 <div className="terminal-command-actions">
                   <button
