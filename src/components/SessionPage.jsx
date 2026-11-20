@@ -1456,13 +1456,6 @@ export default function SessionPage({
             <Icon name="plus" size={15} />
           </button>
 
-          <button
-            className="topbar-btn is-icon theme-toggle"
-            onClick={onToggleTheme}
-            title={resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
-          >
-            <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} size={16} />
-          </button>
         </div>
       </header>
 

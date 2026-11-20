@@ -1328,6 +1328,17 @@ export default function App() {
               ) : null}
             </div>
           ) : null}
+          <button
+            type="button"
+            className="tab-action is-icon tab-theme-toggle"
+            onClick={onToggleTheme}
+            title={
+              resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'
+            }
+            aria-label="切换主题"
+          >
+            <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} size={16} />
+          </button>
         </div>
       </div>
 
