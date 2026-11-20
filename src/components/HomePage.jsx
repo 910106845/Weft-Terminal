@@ -1,8 +1,14 @@
+import { Component, Suspense, lazy, useEffect, useState } from 'react'
 import BrandMark from './BrandMark'
 import GridScan from './GridScan'
 import Icon from './Icons'
 import MetallicPaint from './MetallicPaint'
 import PageTag from './PageTag'
+
+const Spline = lazy(() => import('@splinetool/react-spline'))
+
+const SCENE_URL =
+  'https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode'
 
 const WORDMARK_FONT =
   "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
@@ -41,6 +47,63 @@ const SESSION_ENTRIES = [
     onSelect: 'onNewVirtual'
   }
 ]
+
+class SceneBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { failed: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch() {
+    // 3D 场景不可用时保留网格背景，不影响首页功能
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children
+  }
+}
+
+function SceneBackdrop() {
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    if (ready) return undefined
+    const timer = setTimeout(() => setReady(true), 12000)
+    return () => clearTimeout(timer)
+  }, [ready])
+
+  return (
+    <div
+      className={`home-spline ${ready ? 'is-ready' : ''}`}
+      aria-hidden="true"
+    >
+      <SceneBoundary>
+        <Suspense fallback={null}>
+          <Spline
+            scene={SCENE_URL}
+            htmlContentMode="none"
+            onLoad={(app) => {
+              // 让机器人自带动画略微加快；运行时没有公开 speed，mixer 是可用的
+              try {
+                const mixer = app?._animationControls?.mixer
+                if (mixer && Number.isFinite(mixer.timeScale)) {
+                  mixer.timeScale = 1.3
+                }
+              } catch {
+                // 场景结构变化时保持原速
+              }
+              setReady(true)
+            }}
+          />
+        </Suspense>
+      </SceneBoundary>
+    </div>
+  )
+}
 
 export default function HomePage({
   tabsCount = 0,
@@ -116,7 +179,7 @@ export default function HomePage({
               scanDuration={2.6}
               scanDelay={1.1}
               trail={0.5}
-              glow={dark ? 0.75 : 0.45}
+              glow={dark ? 0.7 : 0.42}
               autoScan
               interactive
               clickEffect="ping"
@@ -125,6 +188,8 @@ export default function HomePage({
               dpr={Math.min(window.devicePixelRatio || 1, 1.75)}
             />
           </div>
+
+          <SceneBackdrop />
           <div className="home-scrim" aria-hidden="true" />
 
           <span className="home-reg home-reg-tl" aria-hidden="true" />
@@ -133,7 +198,7 @@ export default function HomePage({
           <span className="home-reg home-reg-br" aria-hidden="true" />
 
           <div className="home-content">
-            <div className="home-head">
+            <div className="home-masthead">
               <div className="home-wordmark" aria-hidden="true">
                 <MetallicPaint
                   text="Weft Terminal"
@@ -152,6 +217,12 @@ export default function HomePage({
                   intro
                 />
               </div>
+              <span className="home-tagline">WEAVE EVERY CONNECTION</span>
+            </div>
+
+            <span className="home-rule" aria-hidden="true" />
+
+            <div className="home-head">
               <span className="home-eyebrow">
                 <span className="home-eyebrow-dot" />
                 NEW SESSION
