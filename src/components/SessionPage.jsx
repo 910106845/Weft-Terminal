@@ -1437,7 +1437,7 @@ export default function SessionPage({
             pill
             className="library-trigger"
             onClick={openLibrary}
-            title="打开指令库 (⌘K)"
+            title="打开串口指令库 (⌘K)"
           >
             <Icon name="command" size={14} />
             <span>指令库</span>

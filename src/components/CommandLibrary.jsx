@@ -91,11 +91,11 @@ export default function CommandLibrary({
   return (
     <div className={`drawer-layer ${open ? 'is-open' : ''}`} aria-hidden={!open}>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label="指令库">
+      <aside className="drawer" role="dialog" aria-modal="true" aria-label="串口指令库">
         <header className="drawer-head">
           <div>
-            <span className="micro-label">COMMAND LIBRARY</span>
-            <h2>指令库</h2>
+            <span className="micro-label">SERIAL COMMAND LIBRARY</span>
+            <h2>串口指令库</h2>
           </div>
           <div className="drawer-head-actions">
             <span className="count-badge">{favorites.length}</span>

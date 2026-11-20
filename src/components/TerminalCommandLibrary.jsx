@@ -26,7 +26,7 @@ export default function TerminalCommandLibrary({
   const isMac = window.terminalAPI?.platform === 'darwin'
   const isSsh = scope === 'ssh'
   const scopeLabel = isSsh ? 'SSH 指令' : '本地终端指令'
-  const libraryLabel = isSsh ? 'SSH 指令库' : '本地终端指令库'
+  const libraryLabel = isSsh ? '远程终端指令库' : '本地终端指令库'
 
   useEffect(() => {
     if (!open) return undefined
@@ -74,7 +74,7 @@ export default function TerminalCommandLibrary({
         <header className="drawer-head">
           <div>
             <span className="micro-label">
-              {isSsh ? 'SSH TERMINAL LIBRARY' : 'LOCAL TERMINAL LIBRARY'}
+              {isSsh ? 'REMOTE TERMINAL LIBRARY' : 'LOCAL TERMINAL LIBRARY'}
             </span>
             <h2>{libraryLabel}</h2>
           </div>
@@ -300,7 +300,7 @@ export default function TerminalCommandLibrary({
 
         <div className="terminal-library-foot">
           <span>点击指令填入{isSsh ? ' SSH ' : '本地'}终端，不会自动执行</span>
-          <span>{isSsh ? 'SSH' : '本地'}指令库独立保存 · 多窗口共享</span>
+          <span>{isSsh ? '远程终端' : '本地终端'}指令库独立保存 · 多窗口共享</span>
         </div>
       </aside>
     </div>

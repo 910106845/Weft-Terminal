@@ -496,7 +496,7 @@ export default function TerminalPage({
   const isMac = window.terminalAPI?.platform === 'darwin'
   const isSsh = transport === 'ssh'
   const commandScopeLabel = isSsh ? 'SSH 指令' : '本地终端指令'
-  const commandLibraryLabel = isSsh ? 'SSH 指令库' : '本地终端指令库'
+  const commandLibraryLabel = isSsh ? '远程终端指令库' : '本地终端指令库'
 
   activeRef.current = active
   themeRef.current = resolvedTheme
