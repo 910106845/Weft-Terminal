@@ -11,6 +11,32 @@
 - **虚拟串口**：一个页面可创建多对虚拟串口；自动回复规则支持整条消息匹配和 `{串口名}`、`{消息}` 模板，端口与规则随页面保存。
 - **工作台**：标签按类型分组，可自定义标签配色与卡片背景，亮/暗主题，串口、终端、虚拟口统一管理。
 
+## 界面预览
+
+### 串口工具
+
+端口参数、HEX / ASCII / UTF-8 / GBK 收发、时间戳、指令库与批量发送。
+
+![串口工具](docs/serial.png)
+
+### 本地终端
+
+多标签 Shell、命令补全、历史记录，配色跟随应用主题。
+
+![本地终端](docs/local-terminal.png)
+
+### SSH 终端
+
+密码 / 私钥 / SSH Agent 认证，连接后可打开远程文件管理（SFTP）。
+
+![SSH 终端](docs/ssh-terminal.png)
+
+### 虚拟串口
+
+一个页面可创建多对虚拟串口，自动回复支持 `{串口名}`、`{消息}` 模板。
+
+![虚拟串口](docs/virtual-serial.png)
+
 ## 技术栈
 
 Electron · React 18 · Vite · xterm.js · node-pty · serialport · ssh2
@@ -37,4 +63,8 @@ npm run dist      # 打包安装包（macOS dmg / Windows nsis）
 
 ## 数据目录
 
-应用显示名为 Weft Terminal，但内部数据目录仍沿用 `serial-debug`，升级后已有串口配置、指令库和 SSH 会话不会丢失。
+应用数据目录为 `Weft Terminal`（macOS 下是 `~/Library/Application Support/Weft Terminal`）。
+
+从旧版本升级时，首次启动会自动迁移旧目录 `serial-debug` 里的 `Local Storage` 和 `ssh-known-hosts.json`，迁移完成后写入标记 `.migrated-from-serial-debug`，不会重复执行；旧目录会保留作为备份。
+
+> 迁移前请先退出正在运行的旧版本，避免复制到一半的 localStorage。

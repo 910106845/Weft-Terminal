@@ -18,12 +18,41 @@ const {
 
 const APP_DISPLAY_NAME = 'Weft Terminal'
 
-// Keep the existing cache path stable across app renames.
-app.setPath(
-  'userData',
-  process.env.SERIALDEBUG_USER_DATA ||
-    path.join(app.getPath('appData'), 'serial-debug')
-)
+// 数据目录：Weft Terminal。
+// 旧版本用的是 serial-debug，首次启动时把 localStorage 和 SSH 指纹迁移过来。
+const APP_DATA_ROOT = app.getPath('appData')
+const LEGACY_USER_DATA = path.join(APP_DATA_ROOT, 'serial-debug')
+const USER_DATA_DIR = path.join(APP_DATA_ROOT, 'Weft Terminal')
+
+function migrateLegacyUserData() {
+  try {
+    if (!fsSync.existsSync(LEGACY_USER_DATA)) return
+    const marker = path.join(USER_DATA_DIR, '.migrated-from-serial-debug')
+    if (fsSync.existsSync(marker)) return
+    fsSync.mkdirSync(USER_DATA_DIR, { recursive: true })
+    for (const name of ['Local Storage', 'IndexedDB', 'ssh-known-hosts.json']) {
+      const from = path.join(LEGACY_USER_DATA, name)
+      if (!fsSync.existsSync(from)) continue
+      const to = path.join(USER_DATA_DIR, name)
+      if (fsSync.existsSync(to)) continue
+      fsSync.cpSync(from, to, { recursive: true })
+    }
+    fsSync.writeFileSync(
+      marker,
+      `migrated from ${LEGACY_USER_DATA} at ${new Date().toISOString()}\n`,
+      'utf8'
+    )
+  } catch (error) {
+    console.error('[user-data] migration failed:', error)
+  }
+}
+
+if (process.env.SERIALDEBUG_USER_DATA) {
+  app.setPath('userData', process.env.SERIALDEBUG_USER_DATA)
+} else {
+  migrateLegacyUserData()
+  app.setPath('userData', USER_DATA_DIR)
+}
 app.setName(APP_DISPLAY_NAME)
 
 const windows = new Set()
@@ -914,6 +943,9 @@ if (!gotSingleInstanceLock) {
   })
 
   app.whenReady().then(() => {
+    if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
+      app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'))
+    }
     buildApplicationMenu()
     createWindow('main')
 
