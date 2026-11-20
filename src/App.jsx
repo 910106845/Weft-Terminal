@@ -344,9 +344,24 @@ export default function App() {
   const [tabDropTarget, setTabDropTarget] = useState(null)
   const [sshCredentials, setSshCredentials] = useState({})
   const [sshDialog, setSshDialog] = useState(null)
+  const [tabMenu, setTabMenu] = useState(null)
+  const [appToast, setAppToast] = useState(null)
   const menuWrapRef = useRef(null)
+  const appToastTimerRef = useRef(null)
   const addMenuWrapRef = useRef(null)
   const tabListWrapRef = useRef(null)
+
+  const showAppToast = useCallback((message, kind = 'success') => {
+    setAppToast({ message, kind })
+    if (appToastTimerRef.current) clearTimeout(appToastTimerRef.current)
+    appToastTimerRef.current = setTimeout(() => setAppToast(null), 2400)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (appToastTimerRef.current) clearTimeout(appToastTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!activeTabId) return
@@ -456,6 +471,25 @@ export default function App() {
   }, [addMenuOpen, updateAddMenuAlignment])
 
   useEffect(() => {
+    if (!tabMenu) return undefined
+    const onPointerDown = (event) => {
+      if (!event.target.closest?.('.tab-context-menu')) setTabMenu(null)
+    }
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setTabMenu(null)
+    }
+    const onResize = () => setTabMenu(null)
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', onResize)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [tabMenu])
+
+  useEffect(() => {
     if (!tabListOpen) return undefined
     const onPointerDown = (event) => {
       if (!tabListWrapRef.current?.contains(event.target)) setTabListOpen(false)
@@ -551,8 +585,95 @@ export default function App() {
     [activeTabId, renameTabId, sshDialog?.tabId, tabs]
   )
 
+  const closeTabsByIds = useCallback(
+    (ids, keepId) => {
+      const unique = Array.from(new Set(ids)).filter(Boolean)
+      if (unique.length === 0) return
+
+      unique.forEach((id) => clearTabData(id))
+      setSshCredentials((prev) => {
+        let changed = false
+        const next = { ...prev }
+        for (const id of unique) {
+          if (id in next) {
+            delete next[id]
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+      if (sshDialog?.tabId && unique.includes(sshDialog.tabId)) {
+        setSshDialog(null)
+      }
+      if (renameTabId && unique.includes(renameTabId)) {
+        setRenameTabId(null)
+      }
+
+      const removed = new Set(unique)
+      const next = tabs.filter((tab) => !removed.has(tab.id))
+      setOpenedTabIds((prev) => prev.filter((id) => !removed.has(id)))
+      setTabMenu(null)
+
+      if (next.length === 0) {
+        setTabs([])
+        setActiveTabId(null)
+        return
+      }
+
+      setTabs(next)
+      if (removed.has(activeTabId)) {
+        const fallback =
+          keepId && next.some((tab) => tab.id === keepId)
+            ? keepId
+            : next[0].id
+        setActiveTabId(fallback)
+      }
+    },
+    [activeTabId, renameTabId, sshDialog?.tabId, tabs]
+  )
+
+  const copyConnection = useCallback(
+    async (tab, index) => {
+      if (!tab) return
+      let text = ''
+      if (tab.kind === 'serial') {
+        let baud = ''
+        try {
+          const settings = JSON.parse(
+            localStorage.getItem(`serialdebug.settings.${tab.id}`) || 'null'
+          )
+          if (settings?.baudRate) baud = String(settings.baudRate)
+        } catch {
+          // 读取配置失败时只复制串口路径
+        }
+        const port = tab.portPath || '未选择串口'
+        text = baud ? `${port} · ${baud}` : port
+      } else if (tab.kind === 'virtual') {
+        text = tabTitle(tab, index)
+      } else if (tab.terminalType === 'ssh' && tab.sshProfile) {
+        const profile = tab.sshProfile
+        text = `${profile.username || ''}@${profile.host || ''}${
+          profile.port ? `:${profile.port}` : ''
+        }`
+      } else {
+        text = tabTitle(tab, index)
+      }
+
+      try {
+        if (window.terminalAPI?.clipboard?.writeText) {
+          await window.terminalAPI.clipboard.writeText(text)
+        } else {
+          await navigator.clipboard.writeText(text)
+        }
+        showAppToast(`已复制：${text}`)
+      } catch {
+        showAppToast('复制连接失败', 'error')
+      }
+    },
+    [showAppToast]
+  )
+
   const startRename = useCallback((tab, index) => {
-    setActiveTabId(tab.id)
     setRenameTabId(tab.id)
     setRenameDraft(tab.customName || tabTitle(tab, index))
     setTabStyleDraft({
@@ -792,6 +913,12 @@ export default function App() {
   const platform = window.serialAPI?.platform || ''
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || null
   const connectedTabCount = tabs.filter((tab) => tab.connected).length
+  const menuTab = tabMenu
+    ? tabs.find((tab) => tab.id === tabMenu.tabId) || null
+    : null
+  const menuIndex = menuTab
+    ? tabs.findIndex((tab) => tab.id === menuTab.id)
+    : -1
   const renameTarget = tabs.find((tab) => tab.id === renameTabId) || null
   const renameTabKind = renameTarget ? tabKindClass(renameTarget) : 'is-serial'
   const previewTab = renameTarget
@@ -941,6 +1068,15 @@ export default function App() {
                 setDragTabId(null)
                 setTabDropTarget(null)
               }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setTabMenu({
+                  tabId: tab.id,
+                  x: event.clientX,
+                  y: event.clientY
+                })
+              }}
               onDoubleClick={(event) => {
                 event.stopPropagation()
                 startRename(tab, index)
@@ -957,7 +1093,7 @@ export default function App() {
               tabIndex={0}
               title={`${tabTitle(tab, index)}${
                 tab.kind === 'serial' && tab.portPath ? ` · ${tab.portPath}` : ''
-              } · 拖动排序 · 双击编辑`}
+              } · 拖动排序 · 右键菜单`}
             >
               <span className={`tab-kind ${tabKindClass(tab)}`}>
                 <Icon name={tabKindIcon(tab)} size={12} />
@@ -968,18 +1104,6 @@ export default function App() {
                 {tabKindTag(tab)}
               </span>
               {tab.batchRunning ? <span className="tab-batch">循环</span> : null}
-              <button
-                type="button"
-                className="tab-rename"
-                title="编辑标签名称与配色"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  startRename(tab, index)
-                }}
-                onDoubleClick={(event) => event.stopPropagation()}
-              >
-                <Icon name="edit" size={11} />
-              </button>
               <button
                 type="button"
                 className="tab-close"
@@ -1077,17 +1201,6 @@ export default function App() {
         </div>
 
         <div className="tab-strip-actions">
-          <button
-            type="button"
-            className="tab-action is-icon tab-close-all"
-            onClick={requestCloseAll}
-            disabled={tabs.length === 0}
-            title="关闭全部会话"
-            aria-label="关闭全部会话"
-          >
-            <Icon name="close-all" size={14} />
-            <span>全部关闭</span>
-          </button>
           <button
             type="button"
             className="tab-action"
@@ -1222,9 +1335,95 @@ export default function App() {
         })}
       </div>
 
+      {menuTab && menuIndex >= 0 ? (
+        <div
+          className="tab-context-menu"
+          role="menu"
+          style={{
+            left: Math.min(tabMenu.x, Math.max(8, window.innerWidth - 216)),
+            top: Math.min(tabMenu.y, Math.max(8, window.innerHeight - 310))
+          }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            disabled={menuIndex >= tabs.length - 1}
+            onClick={() =>
+              closeTabsByIds(
+                tabs.slice(menuIndex + 1).map((tab) => tab.id),
+                menuTab.id
+              )
+            }
+          >
+            关闭右侧
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={menuIndex <= 0}
+            onClick={() =>
+              closeTabsByIds(
+                tabs.slice(0, menuIndex).map((tab) => tab.id),
+                menuTab.id
+              )
+            }
+          >
+            关闭左侧
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={tabs.length <= 1}
+            onClick={() =>
+              closeTabsByIds(
+                tabs
+                  .filter((_, index) => index !== menuIndex)
+                  .map((tab) => tab.id),
+                menuTab.id
+              )
+            }
+          >
+            关闭其他
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="is-danger"
+            onClick={() => {
+              setTabMenu(null)
+              requestCloseAll()
+            }}
+          >
+            关闭全部
+          </button>
+          <span className="tab-context-sep" aria-hidden="true" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              copyConnection(menuTab, menuIndex)
+              setTabMenu(null)
+            }}
+          >
+            复制连接
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              startRename(menuTab, menuIndex)
+              setTabMenu(null)
+            }}
+          >
+            卡片设置
+          </button>
+        </div>
+      ) : null}
+
       {renameTarget ? (
         <Modal
-          title="编辑标签"
+          title="卡片设置"
           width={520}
           icon={<Icon name="edit" size={17} />}
           onClose={() => setRenameTabId(null)}
@@ -1420,6 +1619,10 @@ export default function App() {
           onConnect={handleSshConnect}
           onDeleteProfile={deleteSshProfile}
         />
+      ) : null}
+
+      {appToast ? (
+        <div className={`toast ${appToast.kind}`}>{appToast.message}</div>
       ) : null}
     </div>
   )

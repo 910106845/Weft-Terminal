@@ -843,7 +843,7 @@ export default function VirtualPortPage({
                     title="清空收发记录"
                     aria-label="清空收发记录"
                   >
-                    <Icon name="trash" size={13} />
+                    <Icon name="broom" size={13} />
                   </button>
                 </div>
               </div>

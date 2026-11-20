@@ -272,6 +272,7 @@ function statusLabel(status) {
   if (status === 'running') return '运行中'
   if (status === 'starting') return '启动中'
   if (status === 'reconnecting') return '重连中'
+  if (status === 'disconnected') return '已断开'
   if (status === 'exited') return '已退出'
   if (status === 'error') return '不可用'
   return '等待中'
@@ -489,6 +490,7 @@ export default function TerminalPage({
   const offlineToastAtRef = useRef(0)
   const pendingInputRef = useRef('')
   const pendingReplayRef = useRef(null)
+  const manualDisconnectRef = useRef(false)
   const showToastRef = useRef(null)
   const isMac = window.terminalAPI?.platform === 'darwin'
   const isSsh = transport === 'ssh'
@@ -1394,6 +1396,8 @@ export default function TerminalPage({
     })
     const offExit = window.terminalAPI?.onExit((payload) => {
       if (!payload || payload.terminalId !== sessionId) return
+      // 手动断开：保留当前画面，等待用户点“重连”
+      if (manualDisconnectRef.current) return
       // 网络断开（不是用户输入 exit）：自动重连，保留当前回看内容
       if (
         transport === 'ssh' &&
@@ -1422,6 +1426,13 @@ export default function TerminalPage({
 
     const dataDisposable = term.onData((data) => {
       lastInputAtRef.current = Date.now()
+      if (statusRef.current === 'disconnected') {
+        if (Date.now() - offlineToastAtRef.current > 2400) {
+          offlineToastAtRef.current = Date.now()
+          showToastRef.current?.('已断开连接，点击“重连”继续', 'error')
+        }
+        return
+      }
       if (transport === 'ssh' && statusRef.current !== 'running') {
         if (statusRef.current === 'reconnecting') {
           // 断线期间先暂存可打印字符，重连成功后填回命令行（不自动执行）
@@ -1594,6 +1605,7 @@ export default function TerminalPage({
   const restartTerminal = useCallback(async () => {
     const term = termRef.current
     if (!term) return
+    manualDisconnectRef.current = false
     cancelReconnect()
     resetTerminalSearch()
     clearLogDecorations()
@@ -1609,6 +1621,18 @@ export default function TerminalPage({
     sessionId,
     spawnSession
   ])
+
+  const disconnectTerminal = useCallback(() => {
+    manualDisconnectRef.current = true
+    setSystemStats(null)
+    setStatus('disconnected')
+    window.terminalAPI?.close(sessionId)?.catch?.(() => {})
+  }, [sessionId])
+
+  const reconnectTerminal = useCallback(async () => {
+    const ok = await spawnSession()
+    if (ok) manualDisconnectRef.current = false
+  }, [spawnSession])
 
   const switchShell = useCallback(
     async (shell) => {
@@ -2152,10 +2176,8 @@ export default function TerminalPage({
             meta={shellInfo?.label}
           />
 
-          <span className="topbar-sep" aria-hidden="true" />
-
           <GlassButton
-            size="md"
+            size="sm"
             className="terminal-library-btn"
             onClick={() => {
               setFilePanelOpen(false)
@@ -2168,15 +2190,7 @@ export default function TerminalPage({
             <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
           </GlassButton>
 
-          <button
-            type="button"
-            className="topbar-btn"
-            onClick={openCreateCommand}
-            title={`新增${commandScopeLabel}`}
-          >
-            <Icon name="plus" size={14} />
-            <span>指令</span>
-          </button>
+          <span className="topbar-sep" aria-hidden="true" />
 
           {isSsh ? (
             <button
@@ -2226,8 +2240,29 @@ export default function TerminalPage({
             title="清空终端显示"
             aria-label="清空终端显示"
           >
-            <Icon name="trash" size={15} />
+            <Icon name="broom" size={15} />
           </button>
+
+          {running || status === 'disconnected' ? (
+            <button
+              type="button"
+              className={`topbar-btn is-icon ${
+                status === 'disconnected' ? 'is-active' : ''
+              }`}
+              onClick={
+                status === 'disconnected'
+                  ? reconnectTerminal
+                  : disconnectTerminal
+              }
+              title={status === 'disconnected' ? '重新连接' : '断开连接'}
+              aria-label={status === 'disconnected' ? '重新连接' : '断开连接'}
+            >
+              <Icon
+                name={status === 'disconnected' ? 'link' : 'unplug'}
+                size={15}
+              />
+            </button>
+          ) : null}
 
           <span className="topbar-sep" aria-hidden="true" />
 
@@ -2660,7 +2695,9 @@ export default function TerminalPage({
               ? `网络中断，正在重连${
                   reconnectAttempt > 1 ? `（第 ${reconnectAttempt} 次）` : ''
                 }`
-              : status === 'exited'
+              : status === 'disconnected'
+                ? '连接已断开 · 点击“重连”恢复'
+                : status === 'exited'
                 ? isSsh
                   ? 'SSH 会话已断开'
                   : '终端已退出'

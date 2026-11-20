@@ -1423,20 +1423,8 @@ export default function SessionPage({
             }
           />
 
-          <span className="topbar-sep" aria-hidden="true" />
-
-          <button
-            className={`topbar-btn panel-toggle ${sidebarCollapsed ? '' : 'is-active'}`}
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? '展开参数面板' : '收起参数面板'}
-            aria-pressed={!sidebarCollapsed}
-          >
-            <Icon name="panel-left" size={14} />
-            <span>参数</span>
-          </button>
-
           <GlassButton
-            size="md"
+            size="sm"
             className="library-trigger"
             onClick={openLibrary}
             title="打开指令库 (⌘K)"
@@ -1445,6 +1433,8 @@ export default function SessionPage({
             <span>指令库</span>
             <kbd>⌘K</kbd>
           </GlassButton>
+
+          <span className="topbar-sep" aria-hidden="true" />
 
           <button
             type="button"
@@ -1580,6 +1570,8 @@ export default function SessionPage({
             height={sendHeight}
             open={showSendPane}
             onToggleOpen={() => setShowSendPane((prev) => !prev)}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={toggleSidebar}
           />
         </main>
       </div>

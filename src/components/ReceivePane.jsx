@@ -355,9 +355,13 @@ export default function ReceivePane({
           <button className="icon-btn" onClick={onSaveLog} title="保存接收日志">
             <Icon name="download" size={15} />
           </button>
-          <button className="ghost-btn" onClick={onClear} title="清空接收区">
-            <Icon name="trash" size={14} />
-            清空
+          <button
+            className="icon-btn"
+            onClick={onClear}
+            title="清空接收区"
+            aria-label="清空接收区"
+          >
+            <Icon name="broom" size={15} />
           </button>
         </div>
       </header>

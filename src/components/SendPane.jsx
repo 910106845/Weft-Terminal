@@ -39,7 +39,9 @@ export default function SendPane({
   onSendFavorite,
   height,
   open,
-  onToggleOpen
+  onToggleOpen,
+  sidebarCollapsed = false,
+  onToggleSidebar
 }) {
   const isHex = send.encoding === 'hex'
   const checksumAlgo = getChecksumAlgo(send.checksumAlgo)
@@ -122,16 +124,15 @@ export default function SendPane({
             <Icon name="star" size={14} />
             收藏
           </button>
-          <GlassButton
-            size="sm"
-            className="send-library-btn"
-            onClick={onOpenLibrary}
-            title="指令库 (⌘K)"
+          <button
+            type="button"
+            className={`icon-btn ${sidebarCollapsed ? '' : 'is-active'}`}
+            onClick={onToggleSidebar}
+            title={sidebarCollapsed ? '展开参数面板' : '收起参数面板'}
+            aria-pressed={!sidebarCollapsed}
           >
-            <Icon name="command" size={14} />
-            指令库
-            <kbd>⌘K</kbd>
-          </GlassButton>
+            <Icon name="panel-left" size={14} />
+          </button>
           <button
             className="icon-btn"
             onClick={onToggleOpen}

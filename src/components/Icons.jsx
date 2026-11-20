@@ -314,6 +314,32 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M12 17h.01" />
         </svg>
       )
+    case 'broom':
+      return (
+        <svg {...props}>
+          <path d="M18.37 2.63 14 7l-1.59-1.59a2 2 0 0 0-2.82 0L8 7l9 9 1.59-1.59a2 2 0 0 0 0-2.82L17 10l4.37-4.37a2.12 2.12 0 1 0-3-3Z" />
+          <path d="M9 8c-2 3-4 3.5-7 4l8 10c2-1 6-5 6-7" />
+          <path d="M14.5 17.5 4.5 15" />
+        </svg>
+      )
+    case 'unplug':
+      return (
+        <svg {...props}>
+          <path d="m19 5 3-3" />
+          <path d="m2 22 3-3" />
+          <path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z" />
+          <path d="M7.5 13.5 10 11" />
+          <path d="M10.5 16.5 13 14" />
+          <path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z" />
+        </svg>
+      )
+    case 'link':
+      return (
+        <svg {...props}>
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+      )
     case 'home':
       return (
         <svg {...props}>
