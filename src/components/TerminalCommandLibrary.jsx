@@ -21,6 +21,8 @@ export default function TerminalCommandLibrary({
   const [dragId, setDragId] = useState(null)
   const [dropTarget, setDropTarget] = useState(null)
   const searchRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   const isMac = window.terminalAPI?.platform === 'darwin'
   const isSsh = scope === 'ssh'
   const scopeLabel = isSsh ? 'SSH 指令' : '本地终端指令'
@@ -28,16 +30,23 @@ export default function TerminalCommandLibrary({
 
   useEffect(() => {
     if (!open) return undefined
-    const frame = requestAnimationFrame(() => searchRef.current?.focus())
+    // 只在打开抽屉时聚焦搜索；新建/编辑弹窗出现后不要抢焦点
+    const frame = requestAnimationFrame(() => {
+      if (!document.querySelector('.modal-overlay')) {
+        searchRef.current?.focus()
+      }
+    })
     const handler = (event) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape') return
+      if (document.querySelector('.modal-overlay')) return
+      onCloseRef.current?.()
     }
     window.addEventListener('keydown', handler)
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('keydown', handler)
     }
-  }, [onClose, open])
+  }, [open])
 
   useEffect(() => {
     if (!open) setQuery('')

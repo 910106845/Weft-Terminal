@@ -125,42 +125,42 @@ export default function HomePage({
 
   return (
     <div className="app home-page">
-      <header className="topbar home-topbar">
-        <div className="brand">
-          <BrandMark active />
-          <div className="brand-text">
-            <span className="brand-line">
-              <span className="brand-title">Weft Terminal</span>
-              <PageTag kind="home" label="首页" accent="#0f9d78" />
-            </span>
-            <span className="brand-sub">WEAVE EVERY CONNECTION</span>
-          </div>
-        </div>
+      {/*<header className="topbar home-topbar">*/}
+      {/*  <div className="brand">*/}
+      {/*    <BrandMark active />*/}
+      {/*    <div className="brand-text">*/}
+      {/*      <span className="brand-line">*/}
+      {/*        <span className="brand-title">Weft Terminal</span>*/}
+      {/*        <PageTag kind="home" label="首页" accent="#0f9d78" />*/}
+      {/*      </span>*/}
+      {/*      <span className="brand-sub">WEAVE EVERY CONNECTION</span>*/}
+      {/*    </div>*/}
+      {/*  </div>*/}
 
-        <div className="topbar-actions home-topbar-actions">
-          <span className="home-session-count">
-            <span
-              className={`home-session-dot ${
-                connectedCount > 0 ? 'is-on' : ''
-              }`}
-            />
-            {connectedCount > 0
-              ? `${connectedCount} 个会话运行中`
-              : tabsCount > 0
-                ? `${tabsCount} 个标签页`
-                : '未打开会话'}
-          </span>
-          <span className="topbar-sep" aria-hidden="true" />
-          <button
-            type="button"
-            className="topbar-btn is-icon theme-toggle"
-            onClick={onToggleTheme}
-            title={resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
-          >
-            <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} size={16} />
-          </button>
-        </div>
-      </header>
+      {/*  <div className="topbar-actions home-topbar-actions">*/}
+      {/*    <span className="home-session-count">*/}
+      {/*      <span*/}
+      {/*        className={`home-session-dot ${*/}
+      {/*          connectedCount > 0 ? 'is-on' : ''*/}
+      {/*        }`}*/}
+      {/*      />*/}
+      {/*      {connectedCount > 0*/}
+      {/*        ? `${connectedCount} 个会话运行中`*/}
+      {/*        : tabsCount > 0*/}
+      {/*          ? `${tabsCount} 个标签页`*/}
+      {/*          : '未打开会话'}*/}
+      {/*    </span>*/}
+      {/*    <span className="topbar-sep" aria-hidden="true" />*/}
+      {/*    <button*/}
+      {/*      type="button"*/}
+      {/*      className="topbar-btn is-icon theme-toggle"*/}
+      {/*      onClick={onToggleTheme}*/}
+      {/*      title={resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}*/}
+      {/*    >*/}
+      {/*      <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} size={16} />*/}
+      {/*    </button>*/}
+      {/*  </div>*/}
+      {/*</header>*/}
 
       <div className="home-stage">
         <section className="home-hero" aria-label="Weft Terminal 首页">
@@ -259,12 +259,6 @@ export default function HomePage({
                 </button>
               ))}
             </div>
-
-              <p className="home-foot">
-                {tabsCount > 0
-                  ? '已有标签页，点击上方标签即可继续。'
-                  : '所有会话已关闭，从上面选择一个入口开始。'}
-              </p>
             </div>
           </div>
 

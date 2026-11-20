@@ -340,11 +340,13 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
         </svg>
       )
-    case 'tab-plus':
+    case 'terminal-plus':
       return (
         <svg {...props}>
-          <path d="M4 8a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" />
-          <path d="M12 11v6M9 14h6" />
+          <rect x="3" y="4" width="13" height="12" rx="2" />
+          <path d="M6.5 8.5 9 11l-2.5 2.5" />
+          <path d="M10.5 13.5h2" />
+          <path d="M18 13v7M14.5 16.5h7" />
         </svg>
       )
     case 'home':
