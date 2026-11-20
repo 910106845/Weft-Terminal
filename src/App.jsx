@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import HomePage from './components/HomePage'
+import { LiquidGlassFilter } from './components/LiquidGlass'
 import SessionPage from './components/SessionPage'
 import TerminalPage from './components/TerminalPage'
 import VirtualPortPage from './components/VirtualPortPage'
@@ -12,12 +14,7 @@ import {
   DEFAULT_TERMINAL_DISPLAY,
   normalizeTerminalDisplay
 } from './lib/terminalDisplay'
-import {
-  loadJSON,
-  loadString,
-  saveJSON,
-  saveString
-} from './lib/format'
+import { loadJSON, saveJSON, saveString } from './lib/format'
 import { useSharedJSON, useSharedString } from './hooks/useSharedState'
 
 const TABS_PREFIX = 'serialdebug.tabs.'
@@ -283,7 +280,6 @@ export default function App() {
 
   const [initialSession] = useState(() => {
     const saved = loadJSON(tabsKey, null)
-    const savedActive = loadString(activeKey, '')
 
     if (Array.isArray(saved) && saved.length > 0) {
       const counts = { serial: 0, terminal: 0, virtual: 0 }
@@ -323,26 +319,16 @@ export default function App() {
         }
         return createTab(kind, counts[kind], overrides)
       })
-      const activeId = tabs.some((tab) => tab.id === savedActive)
-        ? savedActive
-        : tabs[0].id
-      return { tabs, activeId }
+      return { tabs, activeId: null }
     }
 
-    const id = windowId === 'main' ? 'main' : createTabId()
-    return {
-      tabs: [
-        createTab('serial', 1, {
-          id,
-          migrateLegacy: windowId === 'main'
-        })
-      ],
-      activeId: id
-    }
+    return { tabs: [], activeId: null }
   })
 
   const [tabs, setTabs] = useState(initialSession.tabs)
   const [activeTabId, setActiveTabId] = useState(initialSession.activeId)
+  const [openedTabIds, setOpenedTabIds] = useState([])
+  const [closeAllOpen, setCloseAllOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [tabListOpen, setTabListOpen] = useState(false)
@@ -361,6 +347,13 @@ export default function App() {
   const menuWrapRef = useRef(null)
   const addMenuWrapRef = useRef(null)
   const tabListWrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!activeTabId) return
+    setOpenedTabIds((prev) =>
+      prev.includes(activeTabId) ? prev : [...prev, activeTabId]
+    )
+  }, [activeTabId])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -399,7 +392,15 @@ export default function App() {
   }, [tabs])
 
   useEffect(() => {
-    saveString(activeKey, activeTabId)
+    if (activeTabId) {
+      saveString(activeKey, activeTabId)
+      return
+    }
+    try {
+      localStorage.removeItem(activeKey)
+    } catch {
+      // localStorage 不可用时忽略
+    }
   }, [activeTabId])
 
   useEffect(() => {
@@ -534,14 +535,14 @@ export default function App() {
       if (renameTabId === id) setRenameTabId(null)
 
       if (next.length === 0) {
-        const kind = closedTab?.kind === 'terminal' ? 'terminal' : 'serial'
-        const replacement = createTab(kind, 1)
-        setTabs([replacement])
-        setActiveTabId(replacement.id)
+        setTabs([])
+        setActiveTabId(null)
+        setOpenedTabIds([])
         return
       }
 
       setTabs(next)
+      setOpenedTabIds((prev) => prev.filter((tabId) => tabId !== id))
       if (activeTabId === id) {
         const fallback = next[Math.min(Math.max(index - 1, 0), next.length - 1)]
         setActiveTabId(fallback.id)
@@ -634,13 +635,9 @@ export default function App() {
       }
 
       if (nextTabs.length === 0) {
-        const kind =
-          closedTabs[closedTabs.length - 1]?.kind === 'terminal'
-            ? 'terminal'
-            : 'serial'
-        const replacement = createTab(kind, 1)
-        setTabs([replacement])
-        setActiveTabId(replacement.id)
+        setTabs([])
+        setActiveTabId(null)
+        setOpenedTabIds([])
         return
       }
 
@@ -746,6 +743,31 @@ export default function App() {
     [setSshProfiles, sshDialog]
   )
 
+  const requestCloseAll = useCallback(() => {
+    if (tabs.length === 0) return
+    setCloseAllOpen(true)
+  }, [tabs.length])
+
+  const confirmCloseAll = useCallback(() => {
+    tabs.forEach((tab) => clearTabData(tab.id))
+    setSshCredentials({})
+    setSshDialog(null)
+    setRenameTabId(null)
+    setTabs([])
+    setActiveTabId(null)
+    setOpenedTabIds([])
+    setCloseAllOpen(false)
+    setTabListOpen(false)
+    setAddMenuOpen(false)
+  }, [tabs])
+
+  const goHome = useCallback(() => {
+    setActiveTabId(null)
+    setRenameTabId(null)
+    setTabListOpen(false)
+    setAddMenuOpen(false)
+  }, [])
+
   const openNewWindow = useCallback(() => {
     window.serialAPI?.newWindow?.()
     setMenuOpen(false)
@@ -768,6 +790,8 @@ export default function App() {
   }, [])
 
   const platform = window.serialAPI?.platform || ''
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) || null
+  const connectedTabCount = tabs.filter((tab) => tab.connected).length
   const renameTarget = tabs.find((tab) => tab.id === renameTabId) || null
   const renameTabKind = renameTarget ? tabKindClass(renameTarget) : 'is-serial'
   const previewTab = renameTarget
@@ -787,7 +811,18 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <LiquidGlassFilter />
       <div className="tab-strip">
+        <button
+          type="button"
+          className={`tab-home ${activeTab ? '' : 'is-active'}`}
+          onClick={goHome}
+          title="首页"
+          aria-label="返回首页"
+        >
+          <Icon name="home" size={15} />
+        </button>
+
         <div className="tab-list-wrap" ref={tabListWrapRef}>
           <button
             type="button"
@@ -1044,6 +1079,17 @@ export default function App() {
         <div className="tab-strip-actions">
           <button
             type="button"
+            className="tab-action is-icon tab-close-all"
+            onClick={requestCloseAll}
+            disabled={tabs.length === 0}
+            title="关闭全部会话"
+            aria-label="关闭全部会话"
+          >
+            <Icon name="close-all" size={14} />
+            <span>全部关闭</span>
+          </button>
+          <button
+            type="button"
             className="tab-action"
             onClick={openNewWindow}
             title="新建窗口 (⌘N / Ctrl+N)"
@@ -1089,7 +1135,26 @@ export default function App() {
       </div>
 
       <div className="session-stack">
-        {tabs.map((tab) => (
+        {activeTab ? null : (
+          <div className="session-host is-active">
+            <HomePage
+              tabsCount={tabs.length}
+              connectedCount={connectedTabCount}
+              resolvedTheme={resolvedTheme}
+              onToggleTheme={onToggleTheme}
+              onNewSerial={addSerialTab}
+              onNewLocal={addTerminalTab}
+              onNewSsh={openNewSsh}
+              onNewVirtual={() => addTab('virtual')}
+            />
+          </div>
+        )}
+        {tabs.map((tab) => {
+          // 会话页在第一次打开后才挂载：启动停在首页时不会去连接所有历史标签
+          if (tab.id !== activeTabId && !openedTabIds.includes(tab.id)) {
+            return null
+          }
+          return (
           <div
             key={tab.id}
             className={`session-host ${tab.id === activeTabId ? 'is-active' : ''}`}
@@ -1153,7 +1218,8 @@ export default function App() {
               />
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {renameTarget ? (
@@ -1317,6 +1383,31 @@ export default function App() {
           <p className="form-note">
             配色会随标签保存；选择预设样式会清除自定义背景和左边框。自定义背景会自动调整文字对比色。
           </p>
+        </Modal>
+      ) : null}
+
+      {closeAllOpen ? (
+        <Modal
+          title="关闭全部会话"
+          width={460}
+          icon={<Icon name="close-all" size={17} />}
+          onClose={() => setCloseAllOpen(false)}
+          footer={
+            <>
+              <button className="soft-btn" onClick={() => setCloseAllOpen(false)}>
+                取消
+              </button>
+              <button className="danger-btn" onClick={confirmCloseAll}>
+                全部关闭
+              </button>
+            </>
+          }
+        >
+          <p className="modal-copy">
+            将关闭全部 <strong>{tabs.length}</strong> 个标签页，正在运行的串口、终端和
+            SSH 会话都会断开。
+          </p>
+          <p className="modal-copy is-muted">关闭后回到首页，此操作不可撤销。</p>
         </Modal>
       ) : null}
 

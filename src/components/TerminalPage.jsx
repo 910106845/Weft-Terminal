@@ -9,6 +9,7 @@ import GhostCursor from './GhostCursor'
 import BrandMark from './BrandMark'
 import PageTag from './PageTag'
 import StatusCapsule from './StatusCapsule'
+import GlassButton from './LiquidGlass'
 import Modal from './Modal'
 import TerminalCommandEditor from './TerminalCommandEditor'
 import TerminalCommandLibrary from './TerminalCommandLibrary'
@@ -2153,9 +2154,9 @@ export default function TerminalPage({
 
           <span className="topbar-sep" aria-hidden="true" />
 
-          <button
-            type="button"
-            className="topbar-btn terminal-library-btn"
+          <GlassButton
+            size="md"
+            className="terminal-library-btn"
             onClick={() => {
               setFilePanelOpen(false)
               setLibraryOpen(true)
@@ -2165,7 +2166,7 @@ export default function TerminalPage({
             <Icon name="command" size={14} />
             <span>指令库</span>
             <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
-          </button>
+          </GlassButton>
 
           <button
             type="button"

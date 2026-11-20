@@ -10,6 +10,7 @@ import GhostCursor from './GhostCursor'
 import BrandMark from './BrandMark'
 import PageTag from './PageTag'
 import StatusCapsule from './StatusCapsule'
+import GlassButton from './LiquidGlass'
 import {
   COMMON_BAUD_RATES,
   TAIL_OPTIONS,
@@ -1434,15 +1435,16 @@ export default function SessionPage({
             <span>参数</span>
           </button>
 
-          <button
-            className="topbar-btn library-trigger"
+          <GlassButton
+            size="md"
+            className="library-trigger"
             onClick={openLibrary}
             title="打开指令库 (⌘K)"
           >
             <Icon name="command" size={14} />
             <span>指令库</span>
             <kbd>⌘K</kbd>
-          </button>
+          </GlassButton>
 
           <button
             type="button"
@@ -1450,8 +1452,8 @@ export default function SessionPage({
             onClick={onNewSerial}
             title="新建串口工具"
           >
-            <Icon name="plug" size={14} />
-            <span>新串口</span>
+            <Icon name="plus" size={14} />
+            <span>新建</span>
           </button>
 
           <button

@@ -314,6 +314,29 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M12 17h.01" />
         </svg>
       )
+    case 'home':
+      return (
+        <svg {...props}>
+          <path d="M4 10.5 12 4l8 6.5" />
+          <path d="M6 9.5V20h12V9.5" />
+          <path d="M10 20v-5h4v5" />
+        </svg>
+      )
+    case 'arrow-right':
+      return (
+        <svg {...props}>
+          <path d="M4 12h15" />
+          <path d="M13 6l6 6-6 6" />
+        </svg>
+      )
+    case 'close-all':
+      return (
+        <svg {...props}>
+          <rect x="8" y="8" width="12" height="12" rx="2" />
+          <path d="M4 16V6a2 2 0 0 1 2-2h10" />
+          <path d="M12 12l4 4M16 12l-4 4" />
+        </svg>
+      )
     case 'window-plus':
       return (
         <svg {...props}>

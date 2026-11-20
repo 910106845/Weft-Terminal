@@ -1,5 +1,5 @@
 import Icon from './Icons'
-import SpecularButton from './SpecularButton'
+import GlassButton from './LiquidGlass'
 import PortPicker from './PortPicker'
 import HistoryPicker from './HistoryPicker'
 import { parseHexInput } from '../lib/format'
@@ -122,11 +122,16 @@ export default function SendPane({
             <Icon name="star" size={14} />
             收藏
           </button>
-          <button className="ghost-btn accent" onClick={onOpenLibrary} title="指令库 (⌘K)">
+          <GlassButton
+            size="sm"
+            className="send-library-btn"
+            onClick={onOpenLibrary}
+            title="指令库 (⌘K)"
+          >
             <Icon name="command" size={14} />
             指令库
             <kbd>⌘K</kbd>
-          </button>
+          </GlassButton>
           <button
             className="icon-btn"
             onClick={onToggleOpen}
@@ -210,43 +215,14 @@ export default function SendPane({
                 <Icon name="trash" size={13} />
               </button>
             </div>
-            <SpecularButton
-              size="sm"
-              radius={10}
-              lineColor="#ffffff"
-              baseColor="#525252"
-              textColor="#f5f5f5"
-              tint="#ffffff"
-              tintOpacity={0.04}
-              intensity={1}
-              idleIntensity={0.34}
-              shineSize={10}
-              shineFade={34}
-              thickness={1.2}
-              glow={1}
-              proximity={240}
-              className={`send-button ${looping ? 'is-stopping' : ''} ${
+            <GlassButton
+              size="lg"
+              className={`liquid-send ${looping ? 'is-stopping' : ''} ${
                 batchRunning ? 'is-batch' : ''
               }`}
               onClick={onSend}
               disabled={batchRunning}
               title={batchRunning ? '批量循环进行中，请先在顶部停止' : undefined}
-              style={{
-                height: '38px',
-                padding: '0 16px',
-                fontSize: '12.5px',
-                fontWeight: 650,
-                gap: '8px',
-                borderRadius: '10px',
-                '--btn-bg': 'var(--spec-btn-bg, #1a1b1f)',
-                '--btn-bg-hover': 'var(--spec-btn-bg-hover, #212228)',
-                '--btn-fg': '#f5f5f5',
-                '--btn-fg-hover': '#ffffff',
-                '--btn-border': 'transparent',
-                '--btn-border-hover': 'transparent',
-                '--btn-shadow': '0 10px 22px -16px rgba(6, 12, 24, 0.7)',
-                '--btn-shadow-hover': '0 14px 26px -16px rgba(6, 12, 24, 0.75)'
-              }}
             >
               {batchRunning ? (
                 <>
@@ -260,7 +236,7 @@ export default function SendPane({
                   <kbd>{looping ? 'Stop' : 'Enter'}</kbd>
                 </>
               )}
-            </SpecularButton>
+            </GlassButton>
           </div>
         </>
       ) : null}
