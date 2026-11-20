@@ -4658,13 +4658,15 @@ button:focus-visible,
   font-size: 9.5px;
 }
 
-@media (max-width: 1420px) {
+/* 空间不够时先隐藏文字标签，再隐藏整组指标；窗口最小宽度是 1080px，
+   所以正常使用时一直可见 */
+@media (max-width: 1100px) {
   .sys-stat em {
     display: none;
   }
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 900px) {
   .terminal-system-stats {
     display: none;
   }
