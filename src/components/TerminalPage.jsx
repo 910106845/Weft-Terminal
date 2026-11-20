@@ -328,9 +328,9 @@ function SystemStatsBar({ stats, remote }) {
       </span>
       <span
         className={`sys-stat ${sysLevel(diskPct)}`}
-        title={`磁盘 ${formatStatBytes(stats.disk?.used)} / ${formatStatBytes(
-          stats.disk?.total
-        )}`}
+        title={`磁盘 已用 ${formatStatBytes(stats.disk?.used)} · 可用 ${formatStatBytes(
+          stats.disk?.available
+        )} · 共 ${formatStatBytes(stats.disk?.total)}`}
       >
         <Icon name="disk" size={12} />
         <em>磁盘</em>

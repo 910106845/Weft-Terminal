@@ -1745,6 +1745,11 @@ async function getLocalSystemStats() {
   const memTotal = Number(mem.total) || 0
   const memAvailable = Number.isFinite(mem.available) ? mem.available : mem.free
   const memUsed = Math.max(0, memTotal - (Number(memAvailable) || 0))
+  const diskTotal = Number(disk?.size) || 0
+  const diskUsed = Number(disk?.used) || 0
+  const diskAvailable = Number.isFinite(disk?.available)
+    ? Number(disk.available)
+    : Math.max(0, diskTotal - diskUsed)
   const data = {
     cpu: round1(load.currentLoad),
     mem: {
@@ -1753,9 +1758,11 @@ async function getLocalSystemStats() {
       percent: percentOf(memUsed, memTotal)
     },
     disk: {
-      used: Number(disk?.used) || 0,
-      total: Number(disk?.size) || 0,
-      percent: round1(disk?.use)
+      used: diskUsed,
+      available: diskAvailable,
+      total: diskTotal,
+      // 与 df 的 Use% 一致：used / (used + available)，不含 root 保留块
+      percent: percentOf(diskUsed, diskUsed + diskAvailable)
     },
     net
   }
@@ -1816,7 +1823,7 @@ set -- $n1; r1=$1; x1=$2
 set -- $n2; r2=$1; x2=$2
 cpu=$(awk -v t1=$t1 -v i1=$i1 -v t2=$t2 -v i2=$i2 'BEGIN{d=t2-t1; if (d<=0) {print 0; exit} printf "%.1f", 100*(d-(i2-i1))/d}')
 mem=$(awk '/^MemTotal:/{t=$2}/^MemAvailable:/{a=$2}END{printf "%d %d", t*1024, (t-a)*1024}' /proc/meminfo)
-disk=$(df -kP / | awk 'NR==2{printf "%d %d", $2*1024, $3*1024}')
+disk=$(df -kP / | awk 'NR==2{p=$5; gsub("%","",p); printf "%d %d %d %s", $2*1024, $3*1024, $4*1024, p}')
 rx=$(( (r2-r1)*4 )); tx=$(( (x2-x1)*4 ))
 [ "$rx" -lt 0 ] && rx=0
 [ "$tx" -lt 0 ] && tx=0
@@ -1829,8 +1836,8 @@ mem=$(vm_stat | awk -v ps=$(sysctl -n hw.pagesize) -v total=$(sysctl -n hw.memsi
   /Pages wired down/ {w=$NF}
   /Pages occupied by compressor/ {c=$NF}
   END {gsub(/[^0-9]/,"",a); gsub(/[^0-9]/,"",w); gsub(/[^0-9]/,"",c); printf "%d %d", total, (a+w+c)*ps}')
-disk=$(df -kP /System/Volumes/Data 2>/dev/null | awk 'NR==2{printf "%d %d", $2*1024, $3*1024}')
-[ -z "$disk" ] && disk=$(df -kP / | awk 'NR==2{printf "%d %d", $2*1024, $3*1024}')
+disk=$(df -kP /System/Volumes/Data 2>/dev/null | awk 'NR==2{p=$5; gsub("%","",p); printf "%d %d %d %s", $2*1024, $3*1024, $4*1024, p}')
+[ -z "$disk" ] && disk=$(df -kP / | awk 'NR==2{p=$5; gsub("%","",p); printf "%d %d %d %s", $2*1024, $3*1024, $4*1024, p}')
 n1=$(netstat -ibn | awk '!seen[$1]++ && $1 !~ /^lo/ && $7 ~ /^[0-9]+$/ {rx+=$7; tx+=$10} END{printf "%d %d", rx, tx}')
 sleep 0.25
 n2=$(netstat -ibn | awk '!seen[$1]++ && $1 !~ /^lo/ && $7 ~ /^[0-9]+$/ {rx+=$7; tx+=$10} END{printf "%d %d", rx, tx}')
@@ -1861,29 +1868,50 @@ function parseRemoteStats(stdout) {
     .filter(Boolean)
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     const parts = lines[i].split('|').map((part) => part.trim())
-    let values = null
+    let cpu
+    let memTotal
+    let memUsed
+    let diskTotal
+    let diskUsed
+    let diskAvailable
+    let diskPercent
+    let rx
+    let tx
     if (parts.length === 5) {
-      // POSIX 脚本：cpu|memTotal memUsed|diskTotal diskUsed|rx|tx
+      // POSIX 脚本：cpu|memTotal memUsed|diskTotal diskUsed diskAvailable dfUse%|rx|tx
       const mem = parts[1].split(/\s+/).map((part) => Number(part))
-      const disk = parts[2].split(/\s+/).map((part) => Number(part))
-      if (mem.length !== 2 || disk.length !== 2) continue
-      values = [
-        Number(parts[0]),
-        mem[0],
-        mem[1],
-        disk[0],
-        disk[1],
-        Number(parts[3]),
-        Number(parts[4])
-      ]
+      const disk = parts[2].split(/\s+/)
+      if (mem.length !== 2 || disk.length !== 4) continue
+      cpu = Number(parts[0])
+      ;[memTotal, memUsed] = mem
+      diskTotal = Number(disk[0])
+      diskUsed = Number(disk[1])
+      diskAvailable = Number(disk[2])
+      // 直接使用 df 的 Use%，与终端里 `df -h` 显示一致
+      diskPercent = Number(disk[3])
+      rx = Number(parts[3])
+      tx = Number(parts[4])
     } else if (parts.length === 7) {
       // Windows PowerShell：cpu|memTotal|memUsed|diskTotal|diskUsed|rx|tx
-      values = parts.map((part) => Number(part))
+      const values = parts.map((part) => Number(part))
+      if (values.some((value) => !Number.isFinite(value))) continue
+      ;[cpu, memTotal, memUsed, diskTotal, diskUsed, rx, tx] = values
+      diskAvailable = Math.max(0, diskTotal - diskUsed)
+      diskPercent = percentOf(diskUsed, diskTotal)
     } else {
       continue
     }
-    if (values.some((value) => !Number.isFinite(value))) continue
-    const [cpu, memTotal, memUsed, diskTotal, diskUsed, rx, tx] = values
+    const numbers = [
+      cpu,
+      memTotal,
+      memUsed,
+      diskTotal,
+      diskUsed,
+      diskAvailable,
+      rx,
+      tx
+    ]
+    if (numbers.some((value) => !Number.isFinite(value))) continue
     return {
       cpu: round1(cpu),
       mem: {
@@ -1893,8 +1921,11 @@ function parseRemoteStats(stdout) {
       },
       disk: {
         used: diskUsed,
+        available: diskAvailable,
         total: diskTotal,
-        percent: percentOf(diskUsed, diskTotal)
+        percent: Number.isFinite(diskPercent)
+          ? diskPercent
+          : percentOf(diskUsed, diskUsed + diskAvailable)
       },
       net: { rx: Math.max(0, rx), tx: Math.max(0, tx) }
     }
