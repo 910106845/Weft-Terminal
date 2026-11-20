@@ -6470,8 +6470,41 @@ button:focus-visible,
 /* ---------- 顶栏状态胶囊（specular 玻璃） ---------- */
 
 .status-capsule {
-  border: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: default;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+:root[data-theme='dark'] .status-capsule {
+  background: #0d141c;
+  border-color: #202c3a;
+  box-shadow: none;
+}
+
+.status-capsule.is-on {
+  border-color: color-mix(in srgb, var(--mint) 30%, var(--border));
+  background: var(--mint-soft);
+  color: var(--mint);
+}
+
+:root[data-theme='dark'] .status-capsule.is-on {
+  border-color: rgba(52, 211, 153, 0.28);
+  background: rgba(52, 211, 153, 0.1);
 }
 
 .status-capsule-dot {
@@ -6479,12 +6512,12 @@ button:focus-visible,
   height: 6px;
   flex: none;
   border-radius: 50%;
-  background: #7d838d;
+  background: var(--text-3);
 }
 
 .status-capsule.is-on .status-capsule-dot {
-  background: #3ddc97;
-  box-shadow: 0 0 0 2px rgba(61, 220, 151, 0.16);
+  background: var(--mint);
+  box-shadow: 0 0 0 2px var(--mint-soft);
 }
 
 .status-capsule-label {
@@ -6494,10 +6527,11 @@ button:focus-visible,
 
 .status-capsule-meta {
   padding-left: 7px;
-  border-left: 1px solid var(--capsule-line, rgba(255, 255, 255, 0.16));
-  color: var(--capsule-meta, #98a0ab);
+  border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  color: var(--text-2);
   font-family: var(--font-mono);
   font-size: 10px;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -8547,23 +8581,3 @@ button:focus-visible,
 }
 
 /* 状态胶囊：保留圆点与元信息，材质完全交给玻璃层 */
-.status-capsule {
-  cursor: default;
-}
-
-.status-capsule .liquid-btn-content {
-  gap: 7px;
-}
-
-.status-capsule-meta {
-  border-left-color: color-mix(in srgb, currentColor 22%, transparent);
-  color: rgba(0, 0, 0, 0.62);
-}
-
-:root[data-theme='dark'] .status-capsule-meta {
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.liquid-btn.is-pill.is-on .status-capsule-meta {
-  color: var(--text-2);
-}
