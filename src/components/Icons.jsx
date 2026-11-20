@@ -348,6 +348,13 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M10 20v-5h4v5" />
         </svg>
       )
+    case 'arrow-left':
+      return (
+        <svg {...props}>
+          <path d="M20 12H5" />
+          <path d="M11 18l-6-6 6-6" />
+        </svg>
+      )
     case 'arrow-right':
       return (
         <svg {...props}>

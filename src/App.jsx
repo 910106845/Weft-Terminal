@@ -14,7 +14,7 @@ import {
   DEFAULT_TERMINAL_DISPLAY,
   normalizeTerminalDisplay
 } from './lib/terminalDisplay'
-import { loadJSON, saveJSON, saveString } from './lib/format'
+import { loadJSON, loadString, saveJSON, saveString } from './lib/format'
 import { useSharedJSON, useSharedString } from './hooks/useSharedState'
 
 const TABS_PREFIX = 'serialdebug.tabs.'
@@ -280,6 +280,7 @@ export default function App() {
 
   const [initialSession] = useState(() => {
     const saved = loadJSON(tabsKey, null)
+    const savedActive = loadString(activeKey, '')
 
     if (Array.isArray(saved) && saved.length > 0) {
       const counts = { serial: 0, terminal: 0, virtual: 0 }
@@ -319,7 +320,10 @@ export default function App() {
         }
         return createTab(kind, counts[kind], overrides)
       })
-      return { tabs, activeId: null }
+      const activeId = tabs.some((tab) => tab.id === savedActive)
+        ? savedActive
+        : null
+      return { tabs, activeId }
     }
 
     return { tabs: [], activeId: null }
@@ -347,6 +351,7 @@ export default function App() {
   const [tabMenu, setTabMenu] = useState(null)
   const [appToast, setAppToast] = useState(null)
   const menuWrapRef = useRef(null)
+  const tabCardsRef = useRef(null)
   const appToastTimerRef = useRef(null)
   const addMenuWrapRef = useRef(null)
   const tabListWrapRef = useRef(null)
@@ -521,17 +526,31 @@ export default function App() {
     })
   }, [])
 
-  const addTab = useCallback((kind = 'serial') => {
-    const id = createTabId()
-    setTabs((prev) => {
-      const tabKind =
-        kind === 'virtual' ? 'virtual' : kind === 'terminal' ? 'terminal' : 'serial'
-      const index = prev.filter((tab) => tab.kind === tabKind).length + 1
-      return [...prev, createTab(tabKind, index, { id })]
-    })
-    setActiveTabId(id)
-    setAddMenuOpen(false)
-  }, [])
+  const addTab = useCallback(
+    (kind = 'serial') => {
+      const id = createTabId()
+      setTabs((prev) => {
+        const tabKind =
+          kind === 'virtual'
+            ? 'virtual'
+            : kind === 'terminal'
+              ? 'terminal'
+              : 'serial'
+        const index = prev.filter((tab) => tab.kind === tabKind).length + 1
+        const tab = createTab(tabKind, index, { id })
+        const activeIndex = activeTabId
+          ? prev.findIndex((item) => item.id === activeTabId)
+          : -1
+        if (activeIndex < 0) return [...prev, tab]
+        const next = prev.slice()
+        next.splice(activeIndex + 1, 0, tab)
+        return next
+      })
+      setActiveTabId(id)
+      setAddMenuOpen(false)
+    },
+    [activeTabId]
+  )
 
   const addTerminalTab = useCallback(() => addTab('terminal'), [addTab])
   const addSerialTab = useCallback(() => addTab('serial'), [addTab])
@@ -632,46 +651,75 @@ export default function App() {
     [activeTabId, renameTabId, sshDialog?.tabId, tabs]
   )
 
-  const copyConnection = useCallback(
-    async (tab, index) => {
+  const duplicateTab = useCallback(
+    (tab, index) => {
       if (!tab) return
-      let text = ''
-      if (tab.kind === 'serial') {
-        let baud = ''
-        try {
-          const settings = JSON.parse(
-            localStorage.getItem(`serialdebug.settings.${tab.id}`) || 'null'
-          )
-          if (settings?.baudRate) baud = String(settings.baudRate)
-        } catch {
-          // 读取配置失败时只复制串口路径
-        }
-        const port = tab.portPath || '未选择串口'
-        text = baud ? `${port} · ${baud}` : port
-      } else if (tab.kind === 'virtual') {
-        text = tabTitle(tab, index)
-      } else if (tab.terminalType === 'ssh' && tab.sshProfile) {
-        const profile = tab.sshProfile
-        text = `${profile.username || ''}@${profile.host || ''}${
-          profile.port ? `:${profile.port}` : ''
-        }`
-      } else {
-        text = tabTitle(tab, index)
+      const id = createTabId()
+      const title = tabTitle(tab, index)
+      const copy = {
+        ...tab,
+        id,
+        connected: false,
+        batchRunning: false,
+        sshRevision: 0,
+        migrateLegacy: false,
+        customName: `${title} 副本`
       }
 
       try {
-        if (window.terminalAPI?.clipboard?.writeText) {
-          await window.terminalAPI.clipboard.writeText(text)
-        } else {
-          await navigator.clipboard.writeText(text)
+        for (const prefix of [
+          'serialdebug.settings.',
+          'serialdebug.ui.',
+          'serialdebug.virtual.ports.'
+        ]) {
+          const value = localStorage.getItem(`${prefix}${tab.id}`)
+          if (value !== null) localStorage.setItem(`${prefix}${id}`, value)
         }
-        showAppToast(`已复制：${text}`)
       } catch {
-        showAppToast('复制连接失败', 'error')
+        // localStorage 不可用时只复制卡片本身
       }
+
+      setTabs((prev) => {
+        const sourceIndex = prev.findIndex((item) => item.id === tab.id)
+        const next = prev.slice()
+        next.splice(
+          sourceIndex >= 0 ? sourceIndex + 1 : next.length,
+          0,
+          copy
+        )
+        return next
+      })
+      if (tab.kind === 'terminal' && sshCredentials[tab.id]) {
+        setSshCredentials((prev) => ({
+          ...prev,
+          [id]: sshCredentials[tab.id]
+        }))
+      }
+      setActiveTabId(id)
+      setTabMenu(null)
+      showAppToast('已复制卡片')
     },
-    [showAppToast]
+    [setSshCredentials, showAppToast, sshCredentials]
   )
+
+  const scrollTabIntoView = useCallback((id) => {
+    const container = tabCardsRef.current
+    if (!container || !id) return
+    const card = container.querySelector(
+      `[data-tab-id="${window.CSS?.escape ? window.CSS.escape(id) : id}"]`
+    )
+    card?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center'
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!activeTabId) return undefined
+    const frame = requestAnimationFrame(() => scrollTabIntoView(activeTabId))
+    return () => cancelAnimationFrame(frame)
+  }, [activeTabId, scrollTabIntoView])
 
   const startRename = useCallback((tab, index) => {
     setRenameTabId(tab.id)
@@ -847,21 +895,25 @@ export default function App() {
       const id = createTabId()
       setTabs((prev) => {
         const index = prev.filter((tab) => tab.kind === 'terminal').length + 1
-        return [
-          ...prev,
-          createTab('terminal', index, {
-            id,
-            terminalType: 'ssh',
-            sshProfile: profile,
-            fallbackTitle: sshProfileLabel(profile)
-          })
-        ]
+        const tab = createTab('terminal', index, {
+          id,
+          terminalType: 'ssh',
+          sshProfile: profile,
+          fallbackTitle: sshProfileLabel(profile)
+        })
+        const activeIndex = activeTabId
+          ? prev.findIndex((item) => item.id === activeTabId)
+          : -1
+        if (activeIndex < 0) return [...prev, tab]
+        const next = prev.slice()
+        next.splice(activeIndex + 1, 0, tab)
+        return next
       })
       setSshCredentials((prev) => ({ ...prev, [id]: credentials }))
       setActiveTabId(id)
       setSshDialog(null)
     },
-    [setSshProfiles, sshDialog]
+    [activeTabId, setSshProfiles, sshDialog]
   )
 
   const requestCloseAll = useCallback(() => {
@@ -985,6 +1037,7 @@ export default function App() {
                       onClick={() => {
                         setActiveTabId(tab.id)
                         setTabListOpen(false)
+                        scrollTabIntoView(tab.id)
                       }}
                     >
                       <span className={`tab-kind ${tabKindClass(tab)}`}>
@@ -1007,11 +1060,17 @@ export default function App() {
           ) : null}
         </div>
 
-        <div className="tab-cards" role="tablist" aria-label="会话页面">
+        <div
+          className="tab-cards"
+          role="tablist"
+          aria-label="会话页面"
+          ref={tabCardsRef}
+        >
           {tabs.map((tab, index) => (
             <div
               key={tab.id}
               role="tab"
+              data-tab-id={tab.id}
               aria-selected={tab.id === activeTabId}
               className={`tab-card ${tabKindClass(tab)} ${tabSchemeClass(
                 tab
@@ -1340,84 +1399,103 @@ export default function App() {
           className="tab-context-menu"
           role="menu"
           style={{
-            left: Math.min(tabMenu.x, Math.max(8, window.innerWidth - 216)),
-            top: Math.min(tabMenu.y, Math.max(8, window.innerHeight - 310))
+            left: Math.min(tabMenu.x, Math.max(8, window.innerWidth - 224)),
+            top: Math.min(tabMenu.y, Math.max(8, window.innerHeight - 344))
           }}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <button
-            type="button"
-            role="menuitem"
-            disabled={menuIndex >= tabs.length - 1}
-            onClick={() =>
-              closeTabsByIds(
-                tabs.slice(menuIndex + 1).map((tab) => tab.id),
-                menuTab.id
-              )
-            }
-          >
-            关闭右侧
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={menuIndex <= 0}
-            onClick={() =>
-              closeTabsByIds(
-                tabs.slice(0, menuIndex).map((tab) => tab.id),
-                menuTab.id
-              )
-            }
-          >
-            关闭左侧
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={tabs.length <= 1}
-            onClick={() =>
-              closeTabsByIds(
-                tabs
-                  .filter((_, index) => index !== menuIndex)
-                  .map((tab) => tab.id),
-                menuTab.id
-              )
-            }
-          >
-            关闭其他
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="is-danger"
-            onClick={() => {
-              setTabMenu(null)
-              requestCloseAll()
-            }}
-          >
-            关闭全部
-          </button>
-          <span className="tab-context-sep" aria-hidden="true" />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              copyConnection(menuTab, menuIndex)
-              setTabMenu(null)
-            }}
-          >
-            复制连接
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              startRename(menuTab, menuIndex)
-              setTabMenu(null)
-            }}
-          >
-            卡片设置
-          </button>
+          <div className="tab-context-head">
+            <span className={`tab-kind ${tabKindClass(menuTab)}`}>
+              <Icon name={tabKindIcon(menuTab)} size={12} />
+            </span>
+            <span className="tab-context-title">
+              {tabTitle(menuTab, menuIndex)}
+            </span>
+            <span className={`tab-kind-tag ${tabKindClass(menuTab)}`}>
+              {tabKindTag(menuTab)}
+            </span>
+          </div>
+
+          <div className="tab-context-items">
+            <button
+              type="button"
+              role="menuitem"
+              disabled={menuIndex >= tabs.length - 1}
+              onClick={() =>
+                closeTabsByIds(
+                  tabs.slice(menuIndex + 1).map((tab) => tab.id),
+                  menuTab.id
+                )
+              }
+            >
+              <Icon name="arrow-right" size={14} />
+              <span>关闭右侧</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={menuIndex <= 0}
+              onClick={() =>
+                closeTabsByIds(
+                  tabs.slice(0, menuIndex).map((tab) => tab.id),
+                  menuTab.id
+                )
+              }
+            >
+              <Icon name="arrow-left" size={14} />
+              <span>关闭左侧</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={tabs.length <= 1}
+              onClick={() =>
+                closeTabsByIds(
+                  tabs
+                    .filter((_, index) => index !== menuIndex)
+                    .map((tab) => tab.id),
+                  menuTab.id
+                )
+              }
+            >
+              <Icon name="close" size={14} />
+              <span>关闭其他</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="is-danger"
+              onClick={() => {
+                setTabMenu(null)
+                requestCloseAll()
+              }}
+            >
+              <Icon name="close-all" size={14} />
+              <span>关闭全部</span>
+            </button>
+
+            <span className="tab-context-sep" aria-hidden="true" />
+
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => duplicateTab(menuTab, menuIndex)}
+            >
+              <Icon name="copy" size={14} />
+              <span>复制卡片</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                startRename(menuTab, menuIndex)
+                setTabMenu(null)
+              }}
+            >
+              <Icon name="edit" size={14} />
+              <span>卡片设置</span>
+            </button>
+          </div>
         </div>
       ) : null}
 

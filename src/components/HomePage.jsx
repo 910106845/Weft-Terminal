@@ -82,7 +82,18 @@ function SceneBackdrop() {
           <Spline
             scene={SCENE_URL}
             htmlContentMode="none"
-            onLoad={() => setReady(true)}
+            onLoad={(app) => {
+              // 让场景自带的动画略微加快（运行时未公开 speed，mixer 是稳定存在的）
+              try {
+                const mixer = app?._animationControls?.mixer
+                if (mixer && Number.isFinite(mixer.timeScale)) {
+                  mixer.timeScale = 1.3
+                }
+              } catch {
+                // 场景结构变化时保持原速
+              }
+              setReady(true)
+            }}
           />
         </Suspense>
       </SceneBoundary>

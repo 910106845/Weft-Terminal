@@ -7748,7 +7748,7 @@ button:focus-visible,
   width: 100%;
   height: 100%;
   opacity: 0;
-  transition: opacity 0.9s ease;
+  transition: opacity 0.42s ease;
 }
 
 .home-spline.is-ready > div {
@@ -7763,7 +7763,7 @@ button:focus-visible,
   height: 44px;
   border: 1px solid var(--home-line);
   border-radius: 50%;
-  animation: home-pulse 2.4s ease-out infinite;
+  animation: home-pulse 1.6s ease-out infinite;
 }
 
 .home-scene-pulse::before {
@@ -8153,29 +8153,67 @@ button:focus-visible,
 .tab-context-menu {
   position: fixed;
   z-index: 260;
-  min-width: 188px;
-  padding: 5px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: var(--shadow-lg);
+  width: 212px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(20px) saturate(1.35);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+  box-shadow:
+    0 24px 60px -22px rgba(8, 20, 38, 0.45),
+    0 2px 8px rgba(8, 20, 38, 0.08);
+  animation: tab-menu-in 0.14s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+.tab-context-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px 8px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.tab-context-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-context-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .tab-context-menu button {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  height: 30px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 9px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--text-2);
   font-size: 12px;
+  font-weight: 500;
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.tab-context-menu button svg {
+  flex: none;
+  opacity: 0.62;
 }
 
 .tab-context-menu button:hover:not(:disabled) {
@@ -8183,13 +8221,21 @@ button:focus-visible,
   color: var(--text);
 }
 
+.tab-context-menu button:hover:not(:disabled) svg {
+  opacity: 1;
+}
+
 .tab-context-menu button:disabled {
-  opacity: 0.38;
+  opacity: 0.35;
   cursor: default;
 }
 
 .tab-context-menu button.is-danger {
   color: var(--danger);
+}
+
+.tab-context-menu button.is-danger svg {
+  opacity: 0.8;
 }
 
 .tab-context-menu button.is-danger:hover:not(:disabled) {
@@ -8200,8 +8246,19 @@ button:focus-visible,
 .tab-context-sep {
   display: block;
   height: 1px;
-  margin: 4px 6px;
+  margin: 5px 6px;
   background: var(--border-soft);
+}
+
+@keyframes tab-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal-copy {
