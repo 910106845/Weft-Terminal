@@ -1442,146 +1442,71 @@ try {
     exit 0
   }
 
-  # 没有被命名/使用的端口对直接移除，避免越积越多
-  foreach ($key in @($ports.Keys)) {
-    if ($key -like 'CNCA*') {
-      $partner = $key -replace '^CNCA', 'CNCB'
-      if (
-        $ports.ContainsKey($partner) -and
-        ($ports[$key] -eq 'COM#' -or $ports[$key] -eq $ports[$partner])
-      ) {
-        & $Setupc --silent remove $indexes[$key] 2>&1 | Out-Null
-        $ports.Remove($key)
-        $ports.Remove($partner)
-        $indexes.Remove($key)
-        $indexes.Remove($partner)
-      }
-    }
-  }
-
-  $usedCom = @{}
-  foreach ($v in $ports.Values) {
-    if ($v) { $usedCom[$v] = $true }
-  }
-  $busyCom = @{}
-  $busyOutput = (& $Setupc --silent busynames "COM*" 2>&1 | Out-String)
-  foreach ($line in ($busyOutput -split "\\r?\\n")) {
-    foreach ($m in [regex]::Matches($line, 'COM(\\d+)')) {
-      $busyCom[[int]$m.Groups[1].Value] = $true
-    }
-  }
-  function Get-FreePair {
-    for ($n = 20; $n -le 240; $n++) {
-      if (
-        -not $busyCom.ContainsKey($n) -and
-        -not $busyCom.ContainsKey($n + 1) -and
-        -not $usedCom.ContainsKey("COM$n") -and
-        -not $usedCom.ContainsKey("COM$($n + 1)")
-      ) {
-        return "$n,$($n + 1)"
-      }
-    }
-    return ''
-  }
-
   $beforeKeys = @{}
   foreach ($key in @($ports.Keys)) { $beforeKeys[$key] = $true }
 
-  for ($i = 0; $i -lt 6; $i++) {
-    # install - - 会由 Ports class 自动分配真实 COM 名，多数情况下不需要再改名
-    $installOutput = (& $Setupc --silent install - - 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0) {
-      Write-Result ('ERROR=' + (($installOutput -replace '\\r?\\n', ' ').Trim()))
-      exit 0
-    }
-
-    $newKey = $null
-    $newPartner = $null
-    $newIndex = -1
-    for ($wait = 0; $wait -lt 8 -and -not $newKey; $wait++) {
-      Start-Sleep -Milliseconds 300
-      $listAfter = (& $Setupc --silent list 2>&1 | Out-String)
-      $afterPorts = @{}
-      $afterIndexes = @{}
-      foreach ($line in ($listAfter -split "\\r?\\n")) {
-        if ($line -match '(CNC[AB](\\d+))') {
-          $key = $matches[1].ToUpper()
-          $idx = [int]$matches[2]
-          $afterIndexes[$key] = $idx
-          if ($line -match 'RealPortName=(COM\\d+)') {
-            $afterPorts[$key] = $matches[1].ToUpper()
-          } elseif ($line -match 'PortName=(COM#|COM\\d+)') {
-            $afterPorts[$key] = $matches[1].ToUpper()
-          } else {
-            $afterPorts[$key] = 'COM#'
-          }
-        }
-      }
-      foreach ($key in @($afterPorts.Keys)) {
-        if ($key -like 'CNCA*' -and -not $beforeKeys.ContainsKey($key)) {
-          $partner = $key -replace '^CNCA', 'CNCB'
-          if ($afterPorts.ContainsKey($partner)) {
-            $newKey = $key
-            $newPartner = $partner
-            $newIndex = $afterIndexes[$key]
-            break
-          }
-        }
-      }
-    }
-
-    if (-not $newKey) {
-      Write-Result 'ERROR=端口对已创建但未能读取端口名，请点「清空全部虚拟串口」后重试'
-      exit 0
-    }
-
-    $newA = $afterPorts[$newKey]
-    $newB = $afterPorts[$newPartner]
-    if (
-      $newA -match '^COM\\d+$' -and
-      $newB -match '^COM\\d+$' -and
-      $newA -ne $newB
-    ) {
-      Write-Result "PAIRS=$newA,$newB"
-      exit 0
-    }
-
-    $pairText = Get-FreePair
-    if (-not $pairText) {
-      Write-Result ('ERROR=没有可用的 COM 端口号；busy=' + (($busyOutput -replace '\\r?\\n', ' ').Trim()))
-      exit 0
-    }
-    $pairParts = $pairText -split ','
-    $a = "COM$($pairParts[0])"
-    $b = "COM$($pairParts[1])"
-    $usedCom[$a] = $true
-    $usedCom[$b] = $true
-
-    $changeA = (& $Setupc --silent change $newKey "RealPortName=$a" 2>&1 | Out-String)
-    $okA = $LASTEXITCODE -eq 0
-    $changeB = (& $Setupc --silent change $newPartner "RealPortName=$b" 2>&1 | Out-String)
-    $okB = $LASTEXITCODE -eq 0
-    if ($okA -and $okB) {
-      & $Setupc --silent update 2>&1 | Out-Null
-      Start-Sleep -Milliseconds 500
-      $verify = (& $Setupc --silent list 2>&1 | Out-String)
-      if ($verify.Contains("RealPortName=$a") -and $verify.Contains("RealPortName=$b")) {
-        Write-Result "PAIRS=$a,$b"
-        exit 0
-      }
-      & $Setupc --silent remove $newIndex 2>&1 | Out-Null
-      continue
-    }
-
-    & $Setupc --silent remove $newIndex 2>&1 | Out-Null
-    $changeOutput = ($changeA + $changeB)
-    if ($changeOutput -match 'already|exist|in use|占用|已存在') {
-      continue
-    }
-    Write-Result ('ERROR=' + (($changeOutput -replace '\\r?\\n', ' ').Trim()))
+  # PortName=COM# 会启用 Windows Ports class，由系统自动分配真实 COM 数字
+  $installOutput = (& $Setupc --silent install PortName=COM# PortName=COM# 2>&1 | Out-String)
+  if ($LASTEXITCODE -ne 0) {
+    Write-Result ('ERROR=安装端口对失败：' + (($installOutput -replace '\\r?\\n', ' ').Trim()))
     exit 0
   }
-  Write-Result 'ERROR=创建端口对失败：没有找到可用的 COM 端口名'
+
+  $newKey = $null
+  $newPartner = $null
+  $newIndex = -1
+  $newA = ''
+  $newB = ''
+  for ($wait = 0; $wait -lt 20 -and -not $newKey; $wait++) {
+    Start-Sleep -Milliseconds 300
+    $listAfter = (& $Setupc --silent list 2>&1 | Out-String)
+    $afterPorts = @{}
+    $afterIndexes = @{}
+    foreach ($line in ($listAfter -split "\\r?\\n")) {
+      if ($line -match '(CNC[AB](\\d+))') {
+        $key = $matches[1].ToUpper()
+        $idx = [int]$matches[2]
+        $afterIndexes[$key] = $idx
+        if ($line -match 'RealPortName=(COM\\d+)') {
+          $afterPorts[$key] = $matches[1].ToUpper()
+        } elseif ($line -match 'PortName=(COM#|COM\\d+)') {
+          $afterPorts[$key] = $matches[1].ToUpper()
+        } else {
+          $afterPorts[$key] = 'COM#'
+        }
+      }
+    }
+    foreach ($key in @($afterPorts.Keys)) {
+      if ($key -like 'CNCA*' -and -not $beforeKeys.ContainsKey($key)) {
+        $partner = $key -replace '^CNCA', 'CNCB'
+        if ($afterPorts.ContainsKey($partner)) {
+          $newKey = $key
+          $newPartner = $partner
+          $newIndex = $afterIndexes[$key]
+          $newA = $afterPorts[$key]
+          $newB = $afterPorts[$partner]
+          break
+        }
+      }
+    }
+  }
+
+  if (-not $newKey) {
+    Write-Result 'ERROR=安装后未找到新端口对，请检查 com0com 驱动状态'
+    exit 0
+  }
+
+  if (
+    $newA -match '^COM\\d+$' -and
+    $newB -match '^COM\\d+$' -and
+    $newA -ne $newB
+  ) {
+    Write-Result "PAIRS=$newA,$newB"
+    exit 0
+  }
+
+  & $Setupc --silent remove $newIndex 2>&1 | Out-Null
+  Write-Result ('ERROR=Windows 没有分配有效的 COM 端口：' + (($listAfter -replace '\\r?\\n', ' ').Trim()))
 } catch {
   Write-Result ('ERROR=' + (($_.Exception.Message -replace '\\r?\\n', ' ').Trim()))
 }
