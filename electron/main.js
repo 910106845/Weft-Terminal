@@ -1261,15 +1261,23 @@ async function removeCom0comPair(setupc, a, b) {
     (item) => (item.a === a && item.b === b) || (item.a === b && item.b === a)
   )
   if (!entry) return { ok: true }
-  const removed = await execFileAsync(
-    setupc,
-    ['remove', entry.cncA, entry.cncB],
-    { cwd }
-  )
-  if (removed.error) {
-    return { ok: false, error: com0comErrorDetail(removed) }
+  let detail = ''
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const removed = await execFileAsync(
+      setupc,
+      ['remove', entry.cncA, entry.cncB],
+      { cwd }
+    )
+    if (!removed.error) return { ok: true }
+    detail = com0comErrorDetail(removed)
+    if (!/open|busy|使用|占用/i.test(detail)) break
+    await new Promise((resolve) => setTimeout(resolve, 260))
   }
-  return { ok: true }
+  return {
+    ok: false,
+    error: '无法删除 com0com 端口对（可能仍被其他程序占用）',
+    detail
+  }
 }
 
 function execFileAsync(file, args, options = {}) {
@@ -1302,8 +1310,9 @@ async function isWindowsAdmin() {
 function com0comErrorDetail(result) {
   if (!result) return ''
   const message = result.error?.message || ''
+  const stdout = result.stdout || ''
   const stderr = result.stderr || ''
-  return [message, stderr].filter(Boolean).join(' ').trim()
+  return [message, stdout, stderr].filter(Boolean).join(' ').trim()
 }
 
 function quotePowerShell(value) {
@@ -1384,15 +1393,64 @@ try {
     $b = "COM$($freeNames[1])"
     $usedCom[$a] = $true
     $usedCom[$b] = $true
-    $installOutput = (& $Setupc install "PortName=$a" "PortName=$b" 2>&1 | Out-String)
-    if ($LASTEXITCODE -eq 0) {
+
+    # 先用默认名字建对，再分别改名，避免 install 把同一个 PortName 套到两端
+    $installOutput = (& $Setupc install - - 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+      Write-Result ('ERROR=' + (($installOutput -replace '\r?\n', ' ').Trim()))
+      exit 0
+    }
+
+    $cncA = ([regex]::Match($installOutput, 'CNCA\d+')).Value
+    $cncB = ([regex]::Match($installOutput, 'CNCB\d+')).Value
+    if (-not $cncA -or -not $cncB) {
+      $listAfter = (& $Setupc list 2>&1 | Out-String)
+      $portsAfter = @{}
+      foreach ($line in ($listAfter -split "\r?\n")) {
+        if ($line -match '(CNC[AB]\d+)\s+PortName=(COM#|COM\d+)') {
+          $portsAfter[$matches[1].ToUpper()] = $matches[2].ToUpper()
+        }
+      }
+      $candidates = @()
+      foreach ($key in @($portsAfter.Keys)) {
+        if ($key -like 'CNCA*') {
+          $partner = $key -replace '^CNCA', 'CNCB'
+          if ($portsAfter.ContainsKey($partner)) {
+            $candidates += [pscustomobject]@{
+              Key = $key
+              Partner = $partner
+              Index = [int]($key -replace '^CNCA', '')
+            }
+          }
+        }
+      }
+      $newPair = $candidates | Sort-Object Index -Descending | Select-Object -First 1
+      if ($newPair) {
+        $cncA = $newPair.Key
+        $cncB = $newPair.Partner
+      }
+    }
+
+    if (-not $cncA -or -not $cncB) {
+      Write-Result 'ERROR=端口对已创建但无法读取端口名，请手动在 com0com 中检查'
+      exit 0
+    }
+
+    $changeA = (& $Setupc change $cncA "PortName=$a" 2>&1 | Out-String)
+    $okA = $LASTEXITCODE -eq 0
+    $changeB = (& $Setupc change $cncB "PortName=$b" 2>&1 | Out-String)
+    $okB = $LASTEXITCODE -eq 0
+    if ($okA -and $okB) {
       Write-Result "PAIRS=$a,$b"
       exit 0
     }
-    if ($installOutput -match 'already|exist|in use|占用|已存在') {
+
+    & $Setupc remove $cncA $cncB 2>&1 | Out-Null
+    $changeOutput = ($changeA + $changeB)
+    if ($changeOutput -match 'already|exist|in use|占用|已存在') {
       continue
     }
-    Write-Result ('ERROR=' + (($installOutput -replace '\r?\n', ' ').Trim()))
+    Write-Result ('ERROR=' + (($changeOutput -replace '\r?\n', ' ').Trim()))
     exit 0
   }
   Write-Result 'ERROR=创建端口对失败：没有找到可用的 COM 端口名'
@@ -1625,6 +1683,7 @@ async function createWindowsVirtualPort({ portId, ownerId, rules }) {
         emitVirtual(ownerId, portId, { type: 'status', status: 'closed' })
       })
       port.on('error', () => {})
+      windowsSerialPortCache.at = 0
       return {
         ok: true,
         externalPath: pair.b,
@@ -1694,6 +1753,7 @@ ipcMain.handle('virtual:uninstall-com0com', async () => {
   for (const portId of [...virtualPorts.keys()]) closeVirtual(portId)
   windowsPairPool.length = 0
   const result = await uninstallCom0com(setupc)
+  windowsSerialPortCache.at = 0
   if (result.error) {
     return {
       ok: false,
@@ -1755,6 +1815,7 @@ ipcMain.handle('virtual:remove', async (_event, payload = {}) => {
     const result = await removeCom0comPair(setupc, a, b)
     if (!result.ok) return result
     virtualPorts.delete(portId)
+    windowsSerialPortCache.at = 0
     return { ok: true, pairRemoved: true }
   }
 
@@ -1800,6 +1861,36 @@ async function listWindowsRegistryPorts() {
   return ports
 }
 
+let windowsSerialPortCache = { at: 0, ports: [] }
+
+async function listWindowsSerialPortNames() {
+  const now = Date.now()
+  if (now - windowsSerialPortCache.at < 8000) {
+    return windowsSerialPortCache.ports
+  }
+  const result = await execFileAsync('powershell.exe', [
+    '-NoProfile',
+    '-Command',
+    '[System.IO.Ports.SerialPort]::GetPortNames()'
+  ])
+  const ports = []
+  if (!result.error) {
+    for (const line of result.stdout.split(/\r?\n/)) {
+      const match = /^\s*(COM\d+)\s*$/i.exec(line)
+      if (match) {
+        ports.push({
+          path: match[1].toUpperCase(),
+          manufacturer: 'com0com',
+          serialNumber: '',
+          friendlyName: match[1].toUpperCase()
+        })
+      }
+    }
+  }
+  windowsSerialPortCache = { at: now, ports }
+  return ports
+}
+
 ipcMain.handle('serial:list', async () => {
   let ports = []
   try {
@@ -1813,9 +1904,12 @@ ipcMain.handle('serial:list', async () => {
     ports = []
   }
   if (process.platform === 'win32') {
-    const extra = await listWindowsRegistryPorts()
     const known = new Set(ports.map((port) => port.path.toUpperCase()))
-    for (const port of extra) {
+    const extras = [
+      ...(await listWindowsRegistryPorts()),
+      ...(await listWindowsSerialPortNames())
+    ]
+    for (const port of extras) {
       if (known.has(port.path)) continue
       known.add(port.path)
       ports.push(port)

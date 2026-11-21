@@ -390,7 +390,11 @@ export default function VirtualPortPage({
       }));
     setDeleteBusy(false);
     if (!result?.ok) {
-      setDeleteError(result?.error || '删除虚拟串口失败');
+      setDeleteError(
+        result?.detail
+          ? `${result.error || '删除虚拟串口失败'}：${result.detail}`
+          : result?.error || '删除虚拟串口失败'
+      );
       return;
     }
     const nextPorts = ports.filter((port) => port.id !== portId);
@@ -452,7 +456,14 @@ export default function VirtualPortPage({
           ok: false,
           error: error?.message || String(error)
         }));
-      if (!result?.ok) failed.push({ port, error: result?.error || '删除失败' });
+      if (!result?.ok) {
+        failed.push({
+          port,
+          error: result?.detail
+            ? `${result.error || '删除失败'}：${result.detail}`
+            : result?.error || '删除失败'
+        });
+      }
     }
     setClearBusy(false);
     const failedIds = new Set(failed.map((item) => item.port.id));
