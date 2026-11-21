@@ -24,6 +24,7 @@ export default function CommandLibrary({
   onStartBatch,
   onStopBatch
 }) {
+  const isMac = window.serialAPI?.platform === 'darwin'
   const [query, setQuery] = useState('')
   const [dragId, setDragId] = useState(null)
   const [dropTarget, setDropTarget] = useState(null)
@@ -118,7 +119,7 @@ export default function CommandLibrary({
               <Icon name="close" size={12} />
             </button>
           ) : (
-            <kbd>⌘K</kbd>
+            <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
           )}
         </div>
 
@@ -382,7 +383,7 @@ export default function CommandLibrary({
         <footer className="drawer-foot">
           <span>点击外部或右上角 X 关闭</span>
           <span>
-            <kbd>⌘K</kbd> 打开
+            <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd> 打开
           </span>
           <span className="drawer-foot-tip">
             拖动卡片可排序 · 批量循环仅支持同编码

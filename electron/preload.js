@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('terminalAPI', {
   virtual: {
     create: (payload) => ipcRenderer.invoke('virtual:create', payload),
     close: (portId) => ipcRenderer.invoke('virtual:close', { portId }),
-    createPair: () => ipcRenderer.invoke('virtual:create-pair'),
+    installCom0com: () => ipcRenderer.invoke('virtual:install-com0com'),
     setRules: (portId, rules) =>
       ipcRenderer.invoke('virtual:set-rules', { portId, rules }),
     onEvent: (callback) => subscribe('virtual:event', callback)

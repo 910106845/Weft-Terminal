@@ -85,7 +85,13 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Weft Terminal",
       "uninstallDisplayName": "Weft Terminal"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "build/com0com",
+        "to": "com0com"
+      }
+    ]
   },
   "repository": {
     "type": "git",

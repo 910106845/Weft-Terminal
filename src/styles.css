@@ -7162,6 +7162,10 @@ button:focus-visible,
   margin-top: 11px;
 }
 
+.virtual-port-btn.is-wide {
+  grid-column: 1 / -1;
+}
+
 .virtual-port-btn {
   display: inline-flex;
   align-items: center;
@@ -7244,11 +7248,6 @@ button:focus-visible,
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
-}
-
-.virtual-pair-btn {
-  flex: none;
-  width: 100%;
 }
 
 /* 端口说明 */

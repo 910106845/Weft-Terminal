@@ -84,8 +84,6 @@ export default function VirtualPortPage({
   const [now, setNow] = useState(() => Date.now());
   const [hexView, setHexView] = useState(false);
   const [copiedId, setCopiedId] = useState('');
-  const [pairBusy, setPairBusy] = useState(false);
-  const [pairError, setPairError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState('');
   const platform = window.terminalAPI?.platform || '';
   const logRef = useRef(null);
@@ -137,7 +135,8 @@ export default function VirtualPortPage({
             externalPath: '',
             internalPath: '',
             error: result?.error || '创建失败',
-            hint: result?.hint || ''
+            hint: result?.hint || '',
+            installer: Boolean(result?.installer)
           }
         }));
       } else {
@@ -580,14 +579,30 @@ export default function VirtualPortPage({
 
                     <div className="virtual-port-actions">
                       {rt.status === 'error' ? (
-                        <button
-                          type="button"
-                          className="virtual-port-btn"
-                          onClick={() => createPort(port)}
-                        >
-                          <Icon name="refresh" size={13} />
-                          重试
-                        </button>
+                        <>
+                          {rt.installer ? (
+                            <button
+                              type="button"
+                              className="virtual-port-btn is-wide"
+                              onClick={() => {
+                                window.terminalAPI?.virtual
+                                  ?.installCom0com?.()
+                                  ?.catch?.(() => {})
+                              }}
+                            >
+                              <Icon name="download" size={13} />
+                              安装 com0com
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="virtual-port-btn"
+                            onClick={() => createPort(port)}
+                          >
+                            <Icon name="refresh" size={13} />
+                            重试
+                          </button>
+                        </>
                       ) : (
                         <button
                           type="button"
@@ -628,35 +643,10 @@ export default function VirtualPortPage({
               新建虚拟串口
             </button>
 
-            {platform === 'win32' ? (
-              <>
-                <button
-                  type="button"
-                  className="soft-btn virtual-pair-btn"
-                  disabled={pairBusy}
-                  onClick={async () => {
-                    setPairBusy(true);
-                    setPairError('');
-                    const result = await window.terminalAPI?.virtual?.createPair?.();
-                    setPairBusy(false);
-                    if (result?.ok) {
-                      if (activePort) createPort(activePort);
-                    } else {
-                      setPairError(result?.error || '创建端口对失败');
-                    }
-                  }}
-                >
-                  创建 com0com 端口对
-                </button>
-                {pairError ? (
-                  <p className="virtual-port-error">{pairError}</p>
-                ) : null}
-              </>
-            ) : null}
-
             <p className="virtual-note">
-              用支持手填设备路径的工具打开选中的端口，波特率 115200。
-              虚拟串口是 PTY，系统串口列表里看不到；关闭此页面会释放全部端口。
+              {platform === 'win32'
+                ? 'Windows 使用 com0com 创建端口对，新建后会自动分配一对 COM 端口；把另一个 COM 端口给第三方工具打开即可，波特率 115200。'
+                : '用支持手填设备路径的工具打开选中的端口，波特率 115200。虚拟串口是 PTY，系统串口列表里看不到；关闭此页面会释放全部端口。'}
             </p>
           </aside>
 

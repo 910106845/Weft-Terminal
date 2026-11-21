@@ -142,6 +142,8 @@ export default function SessionPage({
   onMetaChange,
   onNewSerial
 }) {
+  const isMac = window.serialAPI?.platform === 'darwin'
+
   const settingsKey = `serialdebug.settings.${sessionId}`
   const uiKey = `serialdebug.ui.${sessionId}`
   const [settings, setSettings] = useState(() => {
@@ -1437,11 +1439,11 @@ export default function SessionPage({
             pill
             className="library-trigger"
             onClick={openLibrary}
-            title="打开串口指令库 (⌘K)"
+            title={`打开串口指令库 (${isMac ? '⌘K' : 'Ctrl K'})`}
           >
             <Icon name="command" size={14} />
             <span>指令库</span>
-            <kbd>⌘K</kbd>
+            <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
           </GlassButton>
 
           <span className="topbar-sep" aria-hidden="true" />

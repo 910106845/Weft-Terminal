@@ -1150,12 +1150,31 @@ function createUnixVirtualPort({ portId, ownerId, rules }) {
   })
 }
 
+function com0comDir() {
+  return process.resourcesPath
+    ? path.join(process.resourcesPath, 'com0com')
+    : ''
+}
+
 function com0comSetupPath() {
+  const bundled = com0comDir()
   const candidates = [
+    bundled ? path.join(bundled, 'setupc.exe') : '',
     'C:\\Program Files (x86)\\com0com\\setupc.exe',
     'C:\\Program Files\\com0com\\setupc.exe'
-  ]
+  ].filter(Boolean)
   return candidates.find((file) => fsSync.existsSync(file)) || ''
+}
+
+function com0comInstallerPath() {
+  const dir = com0comDir()
+  if (!dir) return ''
+  const names = ['com0com-setup.exe', 'setup.exe', 'com0com-installer.exe']
+  for (const name of names) {
+    const file = path.join(dir, name)
+    if (fsSync.existsSync(file)) return file
+  }
+  return ''
 }
 
 function parseComPairs(output) {
@@ -1193,67 +1212,120 @@ function usedComPairKeys() {
   return used
 }
 
+// 多个端口同时创建时串行分配 com0com 端口对，避免抢到同一对
+let com0comCreateQueue = Promise.resolve()
+
+function withCom0comQueue(task) {
+  const run = com0comCreateQueue.then(task, task)
+  com0comCreateQueue = run.then(
+    () => undefined,
+    () => undefined
+  )
+  return run
+}
+
+async function ensureCom0comPair(setupc, listOutput) {
+  const pairs = parseComPairs(listOutput)
+  const used = usedComPairKeys()
+  const existing = pairs.find((pair) => !used.has(`${pair.a}|${pair.b}`))
+  if (existing) return { pair: existing }
+
+  let maxPort = 3
+  for (const match of listOutput.matchAll(/COM(\d+)/gi)) {
+    maxPort = Math.max(maxPort, Number(match[1]))
+  }
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const nameA = `COM${maxPort + 2}`
+    const nameB = `COM${maxPort + 3}`
+    const result = await execFileAsync(setupc, [
+      'install',
+      `PortName=${nameA}`,
+      `PortName=${nameB}`
+    ])
+    if (!result.error) return { pair: { a: nameA, b: nameB } }
+    const message = String(result.error.message || '创建端口对失败')
+    if (/already|exist|in use|duplicate|占用|已存在/i.test(message)) {
+      maxPort += 2
+      continue
+    }
+    return { error: message }
+  }
+  return { error: '创建 com0com 端口对失败' }
+}
+
 async function createWindowsVirtualPort({ portId, ownerId, rules }) {
   const setupc = com0comSetupPath()
   if (!setupc) {
     return {
       ok: false,
-      error: '未检测到 com0com，Windows 需要它来创建虚拟串口对',
-      hint:
-        '安装 com0com 后重试：安装时可勾选 "PortName=COM#" 建对，或用 setupc install PortName=COM20 PortName=COM21 创建一对'
+      error: '未安装 com0com',
+      hint: com0comInstallerPath()
+        ? '请先运行随应用附带的 com0com 安装程序，安装完成后点击「重试」。'
+        : 'Windows 虚拟串口依赖 com0com。请安装 com0com 后点击「重试」。',
+      installer: Boolean(com0comInstallerPath())
     }
   }
-  const { stdout } = await execFileAsync(setupc, ['list'])
-  const pairs = parseComPairs(stdout)
-  if (!pairs.length) {
-    return {
-      ok: false,
-      error: 'com0com 中没有可用的端口对',
-      hint: '在 com0com 的 Setup 里新建一对端口（例如 COM10 ↔ COM11）后重试',
-      pairs: []
+
+  return withCom0comQueue(async () => {
+    const listed = await execFileAsync(setupc, ['list'])
+    if (listed.error) {
+      return {
+        ok: false,
+        error: '无法读取 com0com 端口对',
+        hint: listed.error.message || '请确认 com0com 已正确安装'
+      }
     }
-  }
-  const used = usedComPairKeys()
-  const pair = pairs.find((item) => !used.has(`${item.a}|${item.b}`))
-  if (!pair) {
-    return {
-      ok: false,
-      error: 'com0com 的端口对已全部占用',
-      hint: '在 com0com 的 Setup 里再新建一对端口，然后重试',
-      pairs
+    const ensured = await ensureCom0comPair(setupc, listed.stdout)
+    if (ensured.error) {
+      return {
+        ok: false,
+        error: ensured.error,
+        hint: '请以管理员身份运行本应用，或先在 com0com Setup 中创建一对端口'
+      }
     }
-  }
-  let port
-  try {
-    port = new SerialPort({ path: pair.a, baudRate: 115200, autoOpen: false })
-    await new Promise((resolve, reject) => {
-      port.open((error) => (error ? reject(error) : resolve()))
+    const pair = ensured.pair
+    let port
+    try {
+      // 新建的 com0com 端口偶尔需要一点时间才可打开，短暂重试几次
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          port = new SerialPort({ path: pair.a, baudRate: 115200, autoOpen: false })
+          await new Promise((resolve, reject) => {
+            port.open((error) => (error ? reject(error) : resolve()))
+          })
+          break
+        } catch (error) {
+          if (attempt >= 5) throw error
+          await new Promise((resolve) => setTimeout(resolve, 250))
+        }
+      }
+    } catch (error) {
+      return { ok: false, error: error.message || String(error) }
+    }
+    const state = {
+      kind: 'com',
+      port,
+      ownerId,
+      externalPath: pair.b,
+      internalPath: pair.a,
+      pairKey: `${pair.a}|${pair.b}`,
+      rules: compileRules(rules),
+      matcher: createMessageBuffer(),
+      flushTimer: null,
+      log: []
+    }
+    virtualPorts.set(portId, state)
+    port.on('data', (buffer) => handleVirtualIncoming(portId, buffer))
+    port.on('close', () => {
+      if (virtualPorts.get(portId) === state) {
+        virtualPorts.delete(portId)
+        emitVirtual(ownerId, portId, { type: 'status', status: 'closed' })
+      }
     })
-  } catch (error) {
-    return { ok: false, error: error.message || String(error) }
-  }
-  const state = {
-    kind: 'com',
-    port,
-    ownerId,
-    externalPath: pair.b,
-    internalPath: pair.a,
-    pairKey: `${pair.a}|${pair.b}`,
-    rules: compileRules(rules),
-    matcher: createMessageBuffer(),
-    flushTimer: null,
-    log: []
-  }
-  virtualPorts.set(portId, state)
-  port.on('data', (buffer) => handleVirtualIncoming(portId, buffer))
-  port.on('close', () => {
-    if (virtualPorts.get(portId) === state) {
-      virtualPorts.delete(portId)
-      emitVirtual(ownerId, portId, { type: 'status', status: 'closed' })
-    }
+    port.on('error', () => {})
+    return { ok: true, externalPath: pair.b, internalPath: pair.a, platform: 'win32' }
   })
-  port.on('error', () => {})
-  return { ok: true, externalPath: pair.b, internalPath: pair.a, platform: 'win32' }
 }
 
 ipcMain.handle('virtual:create', async (event, payload = {}) => {
@@ -1267,6 +1339,19 @@ ipcMain.handle('virtual:create', async (event, payload = {}) => {
   }
   if (process.platform === 'win32') return createWindowsVirtualPort(options)
   return createUnixVirtualPort(options)
+})
+
+ipcMain.handle('virtual:install-com0com', async () => {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: '只有 Windows 需要 com0com' }
+  }
+  const installer = com0comInstallerPath()
+  if (!installer) {
+    return { ok: false, error: '未找到随应用附带的 com0com 安装程序' }
+  }
+  const error = await shell.openPath(installer)
+  if (error) return { ok: false, error }
+  return { ok: true }
 })
 
 ipcMain.handle('virtual:close', async (_event, payload = {}) => {
@@ -1284,40 +1369,6 @@ ipcMain.handle('virtual:set-rules', async (_event, payload = {}) => {
     state.flushTimer = null
   }
   return { ok: true }
-})
-
-ipcMain.handle('virtual:create-pair', async () => {
-  if (process.platform !== 'win32') {
-    return { ok: false, error: '只有 Windows 需要创建端口对' }
-  }
-  const setupc = com0comSetupPath()
-  if (!setupc) {
-    return {
-      ok: false,
-      error: '未检测到 com0com',
-      hint: '先安装 com0com（免费），再点一次这个按钮'
-    }
-  }
-  const { stdout } = await execFileAsync(setupc, ['list'])
-  let maxPort = 3
-  for (const match of stdout.matchAll(/COM(\d+)/gi)) {
-    maxPort = Math.max(maxPort, Number(match[1]))
-  }
-  const nameA = `COM${maxPort + 2}`
-  const nameB = `COM${maxPort + 3}`
-  const result = await execFileAsync(setupc, [
-    'install',
-    `PortName=${nameA}`,
-    `PortName=${nameB}`
-  ])
-  if (result.error) {
-    return {
-      ok: false,
-      error: result.error.message || '创建端口对失败',
-      hint: '请以管理员身份运行本应用，或手动在 com0com Setup 里建一对端口'
-    }
-  }
-  return { ok: true, pair: { a: nameA, b: nameB }, stdout: result.stdout }
 })
 
 ipcMain.handle('serial:list', async () => {

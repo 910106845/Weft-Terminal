@@ -56,6 +56,7 @@ export default function Sidebar({
   const send = settings.send
   const checksumAlgo = getChecksumAlgo(send.checksumAlgo)
   const [collapsed, setCollapsed] = useState({})
+  const isMac = window.serialAPI?.platform === 'darwin'
   const toggleCard = (id) =>
     setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }))
 
@@ -428,7 +429,7 @@ export default function Sidebar({
 
       <div className="sidebar-tip">
         <span className="tip-kbd">Enter</span> 发送 · <span className="tip-kbd">Shift+Enter</span>{' '}
-        换行 · <span className="tip-kbd">⌘K</span> 指令库
+        换行 · <span className="tip-kbd">{isMac ? '⌘K' : 'Ctrl K'}</span> 指令库
       </div>
     </aside>
   )
