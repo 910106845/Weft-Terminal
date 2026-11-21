@@ -1298,7 +1298,10 @@ function removePairFromPool(a, b) {
 
 async function removeCom0comPair(setupc, a, b) {
   const cwd = path.dirname(setupc)
-  const listed = await execFileAsync(setupc, ['list'], { cwd })
+  const listed = await execFileAsync(setupc, ['--silent', 'list'], {
+    cwd,
+    timeout: 8000
+  })
   await logCom0com('remove:list', { a, b, output: listed.stdout, detail: com0comErrorDetail(listed) })
   if (listed.error) {
     return { ok: false, error: com0comErrorDetail(listed) }
@@ -1312,10 +1315,24 @@ async function removeCom0comPair(setupc, a, b) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const removed = await execFileAsync(
       setupc,
-      ['remove', String(entry.index)],
-      { cwd }
+      ['--silent', 'remove', String(entry.index)],
+      { cwd, timeout: 15000 }
     )
     if (!removed.error) {
+      const check = await execFileAsync(setupc, ['--silent', 'list'], {
+        cwd,
+        timeout: 8000
+      })
+      const stillThere =
+        !check.error &&
+        parseComPairEntries(check.stdout).some(
+          (item) => item.index === entry.index
+        )
+      if (stillThere) {
+        detail = 'remove 命令已执行，但端口对仍然存在（可能被占用或不支持）'
+        await logCom0com('remove:still-present', { a, b, index: entry.index, output: check.stdout })
+        break
+      }
       await logCom0com('remove:ok', { a, b, cncA: entry.cncA, cncB: entry.cncB })
       return { ok: true }
     }
@@ -1380,7 +1397,7 @@ function Write-Result([string]$text) {
 }
 try {
   Set-Location -LiteralPath (Split-Path -Parent $Setupc)
-  $listOutput = (& $Setupc list 2>&1 | Out-String)
+  $listOutput = (& $Setupc --silent list 2>&1 | Out-String)
   $ports = @{}
   $indexes = @{}
   foreach ($line in ($listOutput -split "\\r?\\n")) {
@@ -1433,7 +1450,7 @@ try {
         $ports.ContainsKey($partner) -and
         ($ports[$key] -eq 'COM#' -or $ports[$key] -eq $ports[$partner])
       ) {
-        & $Setupc remove $indexes[$key] 2>&1 | Out-Null
+        & $Setupc --silent remove $indexes[$key] 2>&1 | Out-Null
         $ports.Remove($key)
         $ports.Remove($partner)
         $indexes.Remove($key)
@@ -1485,7 +1502,7 @@ try {
     $usedCom[$b] = $true
 
     # 先用默认名字建对，再分别改 RealPortName，避免 install 把同一个名字套到两端
-    $installOutput = (& $Setupc install - - 2>&1 | Out-String)
+    $installOutput = (& $Setupc --silent install - - 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) {
       Write-Result ('ERROR=' + (($installOutput -replace '\\r?\\n', ' ').Trim()))
       exit 0
@@ -1496,7 +1513,7 @@ try {
     $newIndex = -1
     for ($wait = 0; $wait -lt 8 -and -not $newKey; $wait++) {
       Start-Sleep -Milliseconds 300
-      $listAfter = (& $Setupc list 2>&1 | Out-String)
+      $listAfter = (& $Setupc --silent list 2>&1 | Out-String)
       $afterPorts = @{}
       $afterIndexes = @{}
       foreach ($line in ($listAfter -split "\\r?\\n")) {
@@ -1531,16 +1548,23 @@ try {
       exit 0
     }
 
-    $changeA = (& $Setupc change $newKey "RealPortName=$a" 2>&1 | Out-String)
+    $changeA = (& $Setupc --silent change $newKey "RealPortName=$a" 2>&1 | Out-String)
     $okA = $LASTEXITCODE -eq 0
-    $changeB = (& $Setupc change $newPartner "RealPortName=$b" 2>&1 | Out-String)
+    $changeB = (& $Setupc --silent change $newPartner "RealPortName=$b" 2>&1 | Out-String)
     $okB = $LASTEXITCODE -eq 0
     if ($okA -and $okB) {
-      Write-Result "PAIRS=$a,$b"
-      exit 0
+      & $Setupc --silent update 2>&1 | Out-Null
+      Start-Sleep -Milliseconds 500
+      $verify = (& $Setupc --silent list 2>&1 | Out-String)
+      if ($verify.Contains("RealPortName=$a") -and $verify.Contains("RealPortName=$b")) {
+        Write-Result "PAIRS=$a,$b"
+        exit 0
+      }
+      & $Setupc --silent remove $newIndex 2>&1 | Out-Null
+      continue
     }
 
-    & $Setupc remove $newIndex 2>&1 | Out-Null
+    & $Setupc --silent remove $newIndex 2>&1 | Out-Null
     $changeOutput = ($changeA + $changeB)
     if ($changeOutput -match 'already|exist|in use|占用|已存在') {
       continue
@@ -1570,7 +1594,7 @@ async function runCom0comPairScript(setupc, usedKeys) {
     'Bypass',
     '-EncodedCommand',
     encoded
-  ])
+  ], { timeout: 90000 })
   let output = ''
   try {
     output = (await fs.readFile(outputPath, 'utf8')).replace(/^\uFEFF/, '')
@@ -1665,10 +1689,10 @@ async function uninstallCom0com(setupc) {
   const uninstaller = com0comUninstallerPath()
   if (uninstaller) {
     const cwd = path.dirname(uninstaller)
-    let result = await execFileAsync(uninstaller, ['/S'], { cwd })
+    let result = await execFileAsync(uninstaller, ['/S'], { cwd, timeout: 30000 })
     if (result.error) {
       // 某些卸载程序不支持 /S，回退到可见的图形界面
-      result = await execFileAsync(uninstaller, [], { cwd })
+      result = await execFileAsync(uninstaller, [], { cwd, timeout: 30000 })
     }
     if (!result.error || result.error.code === 3010) {
       // NSIS 卸载程序有时会先退出再在后台删除文件，稍等并检查
@@ -1682,7 +1706,8 @@ async function uninstallCom0com(setupc) {
   const command = await findCom0comUninstallCommand()
   if (command) {
     const result = await execFileAsync('cmd.exe', ['/c', command], {
-      cwd: path.dirname(setupc)
+      cwd: path.dirname(setupc),
+      timeout: 30000
     })
     if (
       !result.error ||
@@ -1692,7 +1717,10 @@ async function uninstallCom0com(setupc) {
       return result
     }
   }
-  return execFileAsync(setupc, ['uninstall'], { cwd: path.dirname(setupc) })
+  return execFileAsync(setupc, ['--silent', 'uninstall'], {
+    cwd: path.dirname(setupc),
+    timeout: 30000
+  })
 }
 
 function usedComPairKeys() {
@@ -1945,8 +1973,9 @@ ipcMain.handle('virtual:com0com-status', async () => {
   let pairs = 0
   if (installed && admin) {
     const setupc = com0comSetupPath()
-    const listed = await execFileAsync(setupc, ['list'], {
-      cwd: path.dirname(setupc)
+    const listed = await execFileAsync(setupc, ['--silent', 'list'], {
+      cwd: path.dirname(setupc),
+      timeout: 8000
     })
     if (!listed.error) {
       pairs = parseComPairEntries(listed.stdout).length
@@ -1978,7 +2007,10 @@ ipcMain.handle('virtual:clean-com0com', async () => {
   for (const portId of [...virtualPorts.keys()]) closeVirtual(portId)
   windowsPairPool.length = 0
   const cwd = path.dirname(setupc)
-  const listed = await execFileAsync(setupc, ['list'], { cwd })
+  const listed = await execFileAsync(setupc, ['--silent', 'list'], {
+    cwd,
+    timeout: 8000
+  })
   if (listed.error) {
     return { ok: false, error: com0comErrorDetail(listed) }
   }
@@ -1988,8 +2020,8 @@ ipcMain.handle('virtual:clean-com0com', async () => {
   for (const entry of entries) {
     const result = await execFileAsync(
       setupc,
-      ['remove', String(entry.index)],
-      { cwd }
+      ['--silent', 'remove', String(entry.index)],
+      { cwd, timeout: 15000 }
     )
     if (!result.error) removed += 1
     else await logCom0com('clean:remove-failed', { entry, detail: com0comErrorDetail(result) })
