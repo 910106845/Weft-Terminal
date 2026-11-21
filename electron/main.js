@@ -1357,6 +1357,18 @@ try {
     Write-Result ('PAIRS=' + ($free -join ';'))
     exit 0
   }
+  # 清理上次失败留下的未命名端口对（两端都是 COM#），避免越积越多
+  foreach ($key in @($ports.Keys)) {
+    if ($key -like 'CNCA*') {
+      $partner = $key -replace '^CNCA', 'CNCB'
+      if ($ports.ContainsKey($partner) -and $ports[$key] -eq 'COM#' -and $ports[$partner] -eq 'COM#') {
+        & $Setupc remove $key $partner 2>&1 | Out-Null
+        $ports.Remove($key)
+        $ports.Remove($partner)
+      }
+    }
+  }
+
   $usedCom = @{}
   foreach ($v in $ports.Values) {
     if ($v) { $usedCom[$v] = $true }
@@ -1383,6 +1395,9 @@ try {
     }
     return @(0, 0)
   }
+  $beforeKeys = @{}
+  foreach ($key in @($ports.Keys)) { $beforeKeys[$key] = $true }
+
   for ($i = 0; $i -lt 6; $i++) {
     $freeNames = Find-FreePair
     if ($freeNames[0] -eq 0) {
@@ -1401,41 +1416,35 @@ try {
       exit 0
     }
 
-    $cncA = ([regex]::Match($installOutput, 'CNCA\d+')).Value
-    $cncB = ([regex]::Match($installOutput, 'CNCB\d+')).Value
-    if (-not $cncA -or -not $cncB) {
+    # 等驱动把新端口对注册出来，再通过前后差异定位新对（不依赖 install 的输出格式）
+    $newPair = $null
+    for ($wait = 0; $wait -lt 8 -and -not $newPair; $wait++) {
+      Start-Sleep -Milliseconds 300
       $listAfter = (& $Setupc list 2>&1 | Out-String)
-      $portsAfter = @{}
+      $afterPorts = @{}
       foreach ($line in ($listAfter -split "\r?\n")) {
         if ($line -match '(CNC[AB]\d+)\s+PortName=(COM#|COM\d+)') {
-          $portsAfter[$matches[1].ToUpper()] = $matches[2].ToUpper()
+          $afterPorts[$matches[1].ToUpper()] = $matches[2].ToUpper()
         }
       }
-      $candidates = @()
-      foreach ($key in @($portsAfter.Keys)) {
-        if ($key -like 'CNCA*') {
+      foreach ($key in @($afterPorts.Keys)) {
+        if ($key -like 'CNCA*' -and -not $beforeKeys.ContainsKey($key)) {
           $partner = $key -replace '^CNCA', 'CNCB'
-          if ($portsAfter.ContainsKey($partner)) {
-            $candidates += [pscustomobject]@{
-              Key = $key
-              Partner = $partner
-              Index = [int]($key -replace '^CNCA', '')
-            }
+          if ($afterPorts.ContainsKey($partner)) {
+            $newPair = @($key, $partner)
+            break
           }
         }
       }
-      $newPair = $candidates | Sort-Object Index -Descending | Select-Object -First 1
-      if ($newPair) {
-        $cncA = $newPair.Key
-        $cncB = $newPair.Partner
-      }
     }
 
-    if (-not $cncA -or -not $cncB) {
-      Write-Result 'ERROR=端口对已创建但无法读取端口名，请手动在 com0com 中检查'
+    if (-not $newPair) {
+      Write-Result 'ERROR=端口对已创建但未能读取端口名，请点「清理全部 com0com 端口」后重试'
       exit 0
     }
 
+    $cncA = $newPair[0]
+    $cncB = $newPair[1]
     $changeA = (& $Setupc change $cncA "PortName=$a" 2>&1 | Out-String)
     $okA = $LASTEXITCODE -eq 0
     $changeB = (& $Setupc change $cncB "PortName=$b" 2>&1 | Out-String)
@@ -1769,14 +1778,68 @@ ipcMain.handle('app:is-admin', async () => ({
 
 ipcMain.handle('virtual:com0com-status', async () => {
   if (process.platform !== 'win32') {
-    return { platform: process.platform, installed: false, installer: false, admin: false }
+    return {
+      platform: process.platform,
+      installed: false,
+      installer: false,
+      admin: false,
+      pairs: 0
+    }
+  }
+  const installed = Boolean(com0comSetupPath())
+  const admin = await isWindowsAdmin()
+  let pairs = 0
+  if (installed && admin) {
+    const setupc = com0comSetupPath()
+    const listed = await execFileAsync(setupc, ['list'], {
+      cwd: path.dirname(setupc)
+    })
+    if (!listed.error) {
+      pairs = parseComPairEntries(listed.stdout).length
+    }
   }
   return {
     platform: 'win32',
-    installed: Boolean(com0comSetupPath()),
+    installed,
     installer: Boolean(com0comInstallerPath()),
-    admin: await isWindowsAdmin()
+    admin,
+    pairs
   }
+})
+
+ipcMain.handle('virtual:clean-com0com', async () => {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: '只有 Windows 使用 com0com' }
+  }
+  if (!(await isWindowsAdmin())) {
+    return {
+      ok: false,
+      needsAdmin: true,
+      error: '需要管理员权限',
+      hint: '请以管理员身份重新打开 Weft Terminal 后再清理'
+    }
+  }
+  const setupc = com0comSetupPath()
+  if (!setupc) return { ok: false, error: '未检测到 com0com' }
+  for (const portId of [...virtualPorts.keys()]) closeVirtual(portId)
+  windowsPairPool.length = 0
+  const cwd = path.dirname(setupc)
+  const listed = await execFileAsync(setupc, ['list'], { cwd })
+  if (listed.error) {
+    return { ok: false, error: com0comErrorDetail(listed) }
+  }
+  const entries = parseComPairEntries(listed.stdout)
+  let removed = 0
+  for (const entry of entries) {
+    const result = await execFileAsync(
+      setupc,
+      ['remove', entry.cncA, entry.cncB],
+      { cwd }
+    )
+    if (!result.error) removed += 1
+  }
+  windowsSerialPortCache.at = 0
+  return { ok: true, removed, total: entries.length }
 })
 
 ipcMain.handle('virtual:remove', async (_event, payload = {}) => {

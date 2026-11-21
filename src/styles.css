@@ -7268,6 +7268,67 @@ button:focus-visible,
   line-height: 1.6;
 }
 
+.virtual-install-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.virtual-com0com-box {
+  flex: none;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.virtual-com0com-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+
+.virtual-com0com-head strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.virtual-com0com-refresh {
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.virtual-com0com-refresh:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.virtual-com0com-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.virtual-com0com-actions .virtual-port-btn {
+  height: 30px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
 .virtual-admin-warning {
   flex: none;
   display: flex;

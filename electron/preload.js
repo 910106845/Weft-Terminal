@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('terminalAPI', {
     installCom0com: () => ipcRenderer.invoke('virtual:install-com0com'),
     uninstallCom0com: () => ipcRenderer.invoke('virtual:uninstall-com0com'),
     com0comStatus: () => ipcRenderer.invoke('virtual:com0com-status'),
+    cleanCom0com: () => ipcRenderer.invoke('virtual:clean-com0com'),
     setRules: (portId, rules) =>
       ipcRenderer.invoke('virtual:set-rules', { portId, rules }),
     onEvent: (callback) => subscribe('virtual:event', callback)

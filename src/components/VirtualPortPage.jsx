@@ -97,28 +97,34 @@ export default function VirtualPortPage({
   const [com0comInstalled, setCom0comInstalled] = useState(true);
   const [com0comInstaller, setCom0comInstaller] = useState(false);
   const [com0comNotice, setCom0comNotice] = useState('');
+  const [com0comPairs, setCom0comPairs] = useState(0);
+  const [cleanOpen, setCleanOpen] = useState(false);
+  const [cleanBusy, setCleanBusy] = useState(false);
+  const [cleanError, setCleanError] = useState('');
   const platform = window.terminalAPI?.platform || '';
   const adminBlocked = platform === 'win32' && isAdmin !== true;
   const adminRequired = platform === 'win32' && isAdmin === false;
 
-  useEffect(() => {
+  const refreshCom0comStatus = useCallback(async () => {
     if (platform !== 'win32') return;
-    let cancelled = false;
-    window.terminalAPI?.virtual
+    const result = await window.terminalAPI?.virtual
       ?.com0comStatus?.()
-      ?.then((result) => {
-        if (cancelled) return;
-        setIsAdmin(Boolean(result?.admin));
-        setCom0comInstalled(Boolean(result?.installed));
-        setCom0comInstaller(Boolean(result?.installer));
-      })
-      ?.catch?.(() => {
-        if (!cancelled) setIsAdmin(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      ?.catch?.(() => null);
+    if (!result) {
+      setIsAdmin(false);
+      return;
+    }
+    setIsAdmin(Boolean(result.admin));
+    setCom0comInstalled(Boolean(result.installed));
+    setCom0comInstaller(Boolean(result.installer));
+    setCom0comPairs(Number(result.pairs) || 0);
   }, [platform]);
+
+  useEffect(() => {
+    if (platform !== 'win32') return undefined;
+    refreshCom0comStatus();
+    return undefined;
+  }, [platform, refreshCom0comStatus]);
   const logRef = useRef(null);
   const followRef = useRef(true);
   const copyTimerRef = useRef(null);
@@ -198,7 +204,8 @@ export default function VirtualPortPage({
         }
       }));
     }
-  }, []);
+    refreshCom0comStatus();
+  }, [refreshCom0comStatus]);
 
   // 页面激活后，把还没创建过的端口建出来
   useEffect(() => {
@@ -419,6 +426,7 @@ export default function VirtualPortPage({
       setActivePortId(nextPorts[0]?.id || '');
     }
     setDeleteTarget('');
+    refreshCom0comStatus();
   };
 
   const resetAllPortsState = () => {
@@ -438,11 +446,53 @@ export default function VirtualPortPage({
     const result = await window.terminalAPI?.virtual
       ?.installCom0com?.()
       ?.catch?.((error) => ({ ok: false, error: error?.message || String(error) }));
-    if (result?.ok) {
-      setCom0comNotice('已打开 com0com 安装程序，完成安装后请重启应用。');
-    } else {
+    if (!result?.ok) {
       setCom0comNotice(result?.error || '无法打开 com0com 安装程序');
+      return;
     }
+    setCom0comNotice('正在等待 com0com 安装完成…');
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      const status = await window.terminalAPI?.virtual
+        ?.com0comStatus?.()
+        ?.catch?.(() => null);
+      if (status?.installed) {
+        setIsAdmin(Boolean(status.admin));
+        setCom0comInstalled(true);
+        setCom0comInstaller(Boolean(status.installer));
+        setCom0comPairs(Number(status.pairs) || 0);
+        setCom0comNotice('已检测到 com0com，可以直接新建虚拟串口。');
+        return;
+      }
+      if (attempts < 40) {
+        setTimeout(poll, 2000);
+      } else {
+        setCom0comNotice('未检测到安装完成，请安装后点击「重新检测」。');
+      }
+    };
+    setTimeout(poll, 1500);
+  };
+
+  const cleanAllCom0com = async () => {
+    setCleanError('');
+    setCleanBusy(true);
+    const result = await window.terminalAPI?.virtual
+      ?.cleanCom0com?.()
+      ?.catch?.((error) => ({ ok: false, error: error?.message || String(error) }));
+    setCleanBusy(false);
+    if (!result?.ok) {
+      setCleanError(
+        result?.detail
+          ? `${result.error || '清理失败'}：${result.detail}`
+          : result?.error || '清理 com0com 端口失败'
+      );
+      return;
+    }
+    resetAllPortsState();
+    setCleanOpen(false);
+    setCom0comPairs(0);
+    await refreshCom0comStatus();
   };
 
   const clearAllPorts = async () => {
@@ -497,6 +547,7 @@ export default function VirtualPortPage({
       return;
     }
     resetAllPortsState();
+    refreshCom0comStatus();
   };
 
   const copyPath = async (port) => {
@@ -835,22 +886,33 @@ export default function VirtualPortPage({
 
             {platform === 'win32' && com0comInstalled === false ? (
               <>
-                <button
-                  type="button"
-                  className="virtual-add-port"
-                  disabled={adminBlocked || !com0comInstaller}
-                  title={
-                    adminRequired
-                      ? '请以管理员身份重新打开应用后再安装 com0com'
-                      : !com0comInstaller
-                        ? '未找到随应用附带的 com0com 安装程序'
-                        : undefined
-                  }
-                  onClick={installCom0com}
-                >
-                  <Icon name="download" size={13} />
-                  安装 com0com
-                </button>
+                <div className="virtual-install-actions">
+                  <button
+                    type="button"
+                    className="virtual-add-port"
+                    disabled={adminBlocked || !com0comInstaller}
+                    title={
+                      adminRequired
+                        ? '请以管理员身份重新打开应用后再安装 com0com'
+                        : !com0comInstaller
+                          ? '未找到随应用附带的 com0com 安装程序'
+                          : undefined
+                    }
+                    onClick={installCom0com}
+                  >
+                    <Icon name="download" size={13} />
+                    安装 com0com
+                  </button>
+                  <button
+                    type="button"
+                    className="virtual-uninstall-com0com"
+                    onClick={refreshCom0comStatus}
+                    title="重新检测 com0com 是否安装完成"
+                  >
+                    <Icon name="refresh" size={12} />
+                    重新检测
+                  </button>
+                </div>
                 {com0comNotice ? (
                   <p className="virtual-port-hint">{com0comNotice}</p>
                 ) : null}
@@ -876,29 +938,53 @@ export default function VirtualPortPage({
             </button>
 
             {platform === 'win32' && com0comInstalled ? (
-              <button
-                type="button"
-                className="virtual-uninstall-com0com"
-                disabled={adminBlocked}
-                title={
-                  adminRequired
-                    ? '请以管理员身份重新打开应用后再卸载 com0com'
-                    : undefined
-                }
-                onClick={() => {
-                  setUninstallResult('');
-                  setUninstallOpen(true);
-                }}
-              >
-                <Icon name="trash" size={12} />
-                卸载 com0com
-              </button>
+              <div className="virtual-com0com-box">
+                <div className="virtual-com0com-head">
+                  <span>com0com</span>
+                  <strong>{com0comPairs}</strong>
+                  <span>对 · {com0comPairs * 2} 个 COM 口</span>
+                  <button
+                    type="button"
+                    className="virtual-com0com-refresh"
+                    onClick={refreshCom0comStatus}
+                    title="刷新 com0com 端口数量"
+                  >
+                    <Icon name="refresh" size={11} />
+                  </button>
+                </div>
+                <div className="virtual-com0com-actions">
+                  <button
+                    type="button"
+                    className="virtual-port-btn"
+                    disabled={adminBlocked || !com0comPairs}
+                    onClick={() => {
+                      setCleanError('');
+                      setCleanOpen(true);
+                    }}
+                  >
+                    <Icon name="trash" size={12} />
+                    清理全部
+                  </button>
+                  <button
+                    type="button"
+                    className="virtual-port-btn is-danger"
+                    disabled={adminBlocked}
+                    onClick={() => {
+                      setUninstallResult('');
+                      setUninstallOpen(true);
+                    }}
+                  >
+                    <Icon name="trash" size={12} />
+                    卸载 com0com
+                  </button>
+                </div>
+              </div>
             ) : null}
 
             <p className="virtual-note">
               {platform === 'win32'
                 ? com0comInstalled === false
-                  ? '未安装 com0com。请点击上方「安装 com0com」，安装完成后重启应用。'
+                  ? '未安装 com0com。点击上方「安装 com0com」，应用会自动检测安装结果，不需要重启应用。'
                   : activeRuntime.externalPath
                     ? `第三方软件请打开 ${activeRuntime.externalPath}；本应用内部占用 ${activeRuntime.internalPath}，不要打开它。波特率 115200。`
                     : 'Windows 使用 com0com 创建端口对，新建后会自动分配一对 COM 端口；把外部端口给第三方软件打开即可，波特率 115200。'
@@ -1219,6 +1305,48 @@ export default function VirtualPortPage({
               </p>
             </>
           )}
+        </Modal>
+      ) : null}
+
+      {cleanOpen ? (
+        <Modal
+          title="清理全部 com0com 端口"
+          width={440}
+          tone="danger"
+          icon={<Icon name="trash" size={15} />}
+          onClose={() => {
+            if (!cleanBusy) setCleanOpen(false);
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                className="soft-btn"
+                disabled={cleanBusy}
+                onClick={() => setCleanOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="danger-btn"
+                disabled={cleanBusy || adminBlocked}
+                onClick={cleanAllCom0com}
+              >
+                {cleanBusy ? '正在清理…' : '清理'}
+              </button>
+            </>
+          }
+        >
+          <p className="virtual-confirm-text">
+            将删除 com0com 中的全部 {com0comPairs} 对端口，并清空当前虚拟串口卡片。不会卸载 com0com 驱动。
+          </p>
+          <p className="virtual-confirm-note">
+            如果其他程序正在使用这些端口，请先关闭它们。
+          </p>
+          {cleanError ? (
+            <p className="virtual-confirm-note is-danger">{cleanError}</p>
+          ) : null}
         </Modal>
       ) : null}
 
