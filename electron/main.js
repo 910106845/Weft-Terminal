@@ -1222,29 +1222,112 @@ function com0comErrorDetail(result) {
   return [message, stderr].filter(Boolean).join(' ').trim()
 }
 
-function installCom0comPairElevated(setupc, nameA, nameB) {
-  return new Promise((resolve) => {
-    const file = String(setupc).replace(/'/g, "''")
-    const workDir = String(path.dirname(setupc)).replace(/'/g, "''")
-    const command = [
-      `$p = Start-Process -FilePath '${file}'`,
-      `-WorkingDirectory '${workDir}'`,
-      `-ArgumentList @('install','PortName=${nameA}','PortName=${nameB}')`,
-      '-Verb RunAs -PassThru -Wait;',
-      'exit $p.ExitCode'
-    ].join(' ')
-    execFile(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-Command', command],
-      { windowsHide: true },
-      (error, _stdout, stderr) => {
-        resolve({
-          ok: !error,
-          error: error ? [stderr, error.message].filter(Boolean).join(' ') : ''
-        })
+function quotePowerShell(value) {
+  return `'${String(value).replace(/'/g, "''")}'`
+}
+
+function com0comPairScript(setupc, used, output) {
+  return `$Setupc = ${quotePowerShell(setupc)}
+$Used = ${quotePowerShell(used)}
+$Output = ${quotePowerShell(output)}
+$ErrorActionPreference = 'Stop'
+function Write-Result([string]$text) {
+  Set-Content -LiteralPath $Output -Value $text -Encoding UTF8
+}
+try {
+  Set-Location -LiteralPath (Split-Path -Parent $Setupc)
+  $listOutput = (& $Setupc list 2>&1 | Out-String)
+  $ports = @{}
+  foreach ($line in ($listOutput -split "\\r?\\n")) {
+    if ($line -match '^(CNC[AB]\\d+)\\s+PortName=(COM\\d+)') {
+      $ports[$matches[1].ToUpper()] = $matches[2].ToUpper()
+    }
+  }
+  $usedSet = @{}
+  foreach ($u in ($Used -split ',')) {
+    if ($u) { $usedSet[$u] = $true }
+  }
+  foreach ($key in @($ports.Keys)) {
+    if ($key -like 'CNCA*') {
+      $partner = $key -replace '^CNCA', 'CNCB'
+      if ($ports.ContainsKey($partner)) {
+        $a = $ports[$key]
+        $b = $ports[$partner]
+        if (-not $usedSet.ContainsKey("$a|$b")) {
+          Write-Result "PAIR=$a,$b"
+          exit 0
+        }
       }
-    )
-  })
+    }
+  }
+  $max = 3
+  foreach ($m in [regex]::Matches($listOutput, 'COM(\\d+)')) {
+    $n = [int]$m.Groups[1].Value
+    if ($n -gt $max) { $max = $n }
+  }
+  for ($i = 0; $i -lt 8; $i++) {
+    $a = "COM$($max + 2)"
+    $b = "COM$($max + 3)"
+    $installOutput = (& $Setupc install "PortName=$a" "PortName=$b" 2>&1 | Out-String)
+    if ($LASTEXITCODE -eq 0) {
+      Write-Result "PAIR=$a,$b"
+      exit 0
+    }
+    if ($installOutput -match 'already|exist|in use|占用|已存在') {
+      $max += 2
+      continue
+    }
+    Write-Result ('ERROR=' + (($installOutput -replace '\\r?\\n', ' ').Trim()))
+    exit 0
+  }
+  Write-Result 'ERROR=创建端口对失败：没有找到可用的 COM 端口名'
+} catch {
+  Write-Result ('ERROR=' + (($_.Exception.Message -replace '\\r?\\n', ' ').Trim()))
+}
+`
+}
+
+async function createCom0comPairElevated(setupc, usedKeys) {
+  const outputPath = path.join(
+    app.getPath('temp'),
+    `weft-com0com-${process.pid}-${Date.now()}.out`
+  )
+  const script = com0comPairScript(setupc, usedKeys.join(','), outputPath)
+  const encoded = Buffer.from(script, 'utf16le').toString('base64')
+  const command = [
+    `$p = Start-Process -FilePath 'powershell.exe'`,
+    `-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','${encoded}')`,
+    '-Verb RunAs -PassThru -Wait;',
+    'exit $p.ExitCode'
+  ].join(' ')
+
+  const launched = await execFileAsync('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    command
+  ])
+  let output = ''
+  try {
+    output = (await fs.readFile(outputPath, 'utf8')).replace(/^\uFEFF/, '')
+  } catch {
+    // UAC 被取消或脚本没有写出结果
+  }
+  fs.unlink(outputPath).catch(() => {})
+
+  const pair = /PAIR=(COM\d+),(COM\d+)/i.exec(output)
+  if (pair) {
+    return { pair: { a: pair[1].toUpperCase(), b: pair[2].toUpperCase() } }
+  }
+  const detail = /ERROR=([^\r\n]+)/i.exec(output)
+  return {
+    error: '创建 com0com 端口对失败',
+    detail:
+      (detail && detail[1].trim()) ||
+      launched?.stderr ||
+      launched?.error?.message ||
+      'UAC 已取消或 com0com 脚本未执行'
+  }
 }
 
 function usedComPairKeys() {
@@ -1278,32 +1361,26 @@ async function ensureCom0comPair(setupc, listOutput) {
     maxPort = Math.max(maxPort, Number(match[1]))
   }
 
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const nameA = `COM${maxPort + 2}`
-    const nameB = `COM${maxPort + 3}`
-    const result = await execFileAsync(
-      setupc,
-      ['install', `PortName=${nameA}`, `PortName=${nameB}`],
-      { cwd: path.dirname(setupc) }
-    )
-    if (!result.error) return { pair: { a: nameA, b: nameB } }
+  const nameA = `COM${maxPort + 2}`
+  const nameB = `COM${maxPort + 3}`
+  const result = await execFileAsync(
+    setupc,
+    ['install', `PortName=${nameA}`, `PortName=${nameB}`],
+    { cwd: path.dirname(setupc) }
+  )
+  if (!result.error) return { pair: { a: nameA, b: nameB } }
 
-    const detail = com0comErrorDetail(result)
-    if (/already|exist|in use|duplicate|占用|已存在/i.test(detail)) {
-      maxPort += 2
-      continue
-    }
-    if (/access|elevat|administrator|denied|拒绝访问|管理员|权限|0x5\b|EACCES|EPERM/i.test(detail)) {
-      const elevated = await installCom0comPairElevated(setupc, nameA, nameB)
-      if (elevated.ok) return { pair: { a: nameA, b: nameB } }
-      return {
-        error: '创建 com0com 端口对失败',
-        detail: elevated.error || detail
-      }
-    }
-    return { error: '创建 com0com 端口对失败', detail: detail || 'setupc install 执行失败' }
+  // 普通权限下 setupc 会返回 EACCES；也可能是端口名已被占用。
+  // 统一走一次管理员脚本：重新读取端口对、复用空闲对或创建新对。
+  const detail = com0comErrorDetail(result)
+  const elevated = await createCom0comPairElevated(setupc, [
+    ...usedComPairKeys()
+  ])
+  if (elevated.pair) return { pair: elevated.pair }
+  return {
+    error: elevated.error || '创建 com0com 端口对失败',
+    detail: elevated.detail || detail
   }
-  return { error: '创建 com0com 端口对失败', detail: '端口名冲突，请手动在 com0com 中创建端口对' }
 }
 
 async function createWindowsVirtualPort({ portId, ownerId, rules }) {
