@@ -1,15 +1,17 @@
-# 随包 com0com（可选）
+# 随包 com0com
 
-Windows 虚拟串口依赖 [com0com](https://com0com.sourceforge.net/)（GPLv2，内核模式驱动）。
+Windows 虚拟串口依赖 [com0com](https://sourceforge.net/projects/com0com/) 3.0.0.0（GPLv2，内核模式驱动）。
 
-如果希望安装包里自带 com0com：
+本目录内容会随 Windows 安装包复制到 `resources/com0com/`：
 
-1. 从 com0com 官方渠道获取安装程序，放到本目录。
-2. 文件名使用 `com0com-setup.exe`、`setup.exe` 或 `com0com-installer.exe` 之一。
-3. 重新打包。应用会优先使用 `resources/com0com/setupc.exe`，找不到时提示用户运行随包安装程序。
+- `com0com-setup.exe`：官方 x64 签名安装程序
+- `LICENSE.txt`：GPLv2 许可证
+- `SOURCE.txt`：上游地址、版本与校验值
 
-注意：
+安装流程：
 
-- com0com 安装驱动需要管理员权限（UAC），无法在普通用户权限下静默完成。
-- com0com 使用 GPLv2，分发时请同时附带其许可证和源代码获取方式。
-- 建议在 Windows 10 / 11 上验证驱动签名与 Secure Boot 兼容性后再发布。
+1. 首次创建虚拟串口且系统未安装 com0com 时，卡片会显示「安装 com0com」。
+2. 点击后运行随包安装程序（需要管理员权限 / UAC）。
+3. 安装完成后回到虚拟串口页面，点击「重试」。
+
+注意：该驱动为 2017 年签名的 Windows 7 版本，Windows 10 可正常使用；部分 Windows 11 / Secure Boot 环境可能遇到驱动签名限制（Code 52），需要在目标机器上验证。

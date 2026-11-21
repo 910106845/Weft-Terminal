@@ -1,0 +1,9 @@
+com0com 3.0.0.0 (x64 signed installer)
+
+Upstream: https://sourceforge.net/projects/com0com/
+Download: https://sourceforge.net/projects/com0com/files/com0com/3.0.0.0/com0com-3.0.0.0-i386-and-x64-signed.zip
+License: GNU General Public License v2 (see LICENSE.txt)
+
+Bundled file: com0com-setup.exe
+Original file: Setup_com0com_v3.0.0.0_W7_x64_signed.exe
+SHA-256: 26486b28604b49a9008c54feb11b9ece0008a8287ee5caf0bcf2a62f4317128f
