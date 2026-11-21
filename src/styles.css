@@ -7167,6 +7167,27 @@ button:focus-visible,
   word-break: break-word;
 }
 
+.virtual-port-usage {
+  margin: 8px 2px 0;
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.virtual-port-usage code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.virtual-port-usage span {
+  margin: 0 4px;
+  opacity: 0.55;
+}
+
 .virtual-port-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -7268,6 +7289,30 @@ button:focus-visible,
 .virtual-clear-all:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.virtual-uninstall-com0com {
+  flex: none;
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: center;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.virtual-uninstall-com0com:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .virtual-confirm-note {

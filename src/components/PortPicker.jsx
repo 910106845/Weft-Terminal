@@ -53,6 +53,7 @@ export default function PortPicker({ ports, value, connected, onChange, onRefres
       bottom: openUp ? window.innerHeight - rect.top + 8 : undefined
     })
     setOpen(true)
+    onRefresh?.()
   }
 
   const current = ports.find((port) => port.path === value)

@@ -989,6 +989,30 @@ if (!gotSingleInstanceLock) {
 // 一个页面可以有多个端口，每个端口用独立的 portId 区分。
 
 const virtualPorts = new Map()
+// 管理员脚本一次返回多个空闲端口对，后续新建直接复用，避免每次都弹 UAC
+const windowsPairPool = []
+const WINDOWS_PAIR_POOL_MAX = 12
+
+function pairKey(pair) {
+  return pair ? `${pair.a}|${pair.b}` : ''
+}
+
+function addPairToPool(pair) {
+  if (!pair?.a || !pair?.b) return
+  const key = pairKey(pair)
+  if (windowsPairPool.some((item) => pairKey(item) === key)) return
+  if (windowsPairPool.length >= WINDOWS_PAIR_POOL_MAX) return
+  windowsPairPool.push({ a: pair.a, b: pair.b })
+}
+
+function takePairFromPool() {
+  while (windowsPairPool.length) {
+    const pair = windowsPairPool.shift()
+    if (usedComPairKeys().has(pairKey(pair))) continue
+    return pair
+  }
+  return null
+}
 const VIRTUAL_LOG_LIMIT = 400
 // 没有换行结尾的数据，安静这么久后当作一条完整消息
 const VIRTUAL_IDLE_MS = 80
@@ -1072,6 +1096,9 @@ function closeVirtual(portId) {
   const state = virtualPorts.get(portId)
   if (!state) return
   virtualPorts.delete(portId)
+  if (state.kind === 'com' && state.internalPath && state.externalPath) {
+    addPairToPool({ a: state.internalPath, b: state.externalPath })
+  }
   if (state.flushTimer) {
     clearTimeout(state.flushTimer)
     state.flushTimer = null
@@ -1247,6 +1274,7 @@ try {
   foreach ($u in ($Used -split ',')) {
     if ($u) { $usedSet[$u] = $true }
   }
+  $free = @()
   foreach ($key in @($ports.Keys)) {
     if ($key -like 'CNCA*') {
       $partner = $key -replace '^CNCA', 'CNCB'
@@ -1254,11 +1282,14 @@ try {
         $a = $ports[$key]
         $b = $ports[$partner]
         if (-not $usedSet.ContainsKey("$a|$b")) {
-          Write-Result "PAIR=$a,$b"
-          exit 0
+          $free += "$a,$b"
         }
       }
     }
+  }
+  if ($free.Count -gt 0) {
+    Write-Result ('PAIRS=' + ($free -join ';'))
+    exit 0
   }
   $max = 3
   foreach ($m in [regex]::Matches($listOutput, 'COM(\\d+)')) {
@@ -1270,7 +1301,7 @@ try {
     $b = "COM$($max + 3)"
     $installOutput = (& $Setupc install "PortName=$a" "PortName=$b" 2>&1 | Out-String)
     if ($LASTEXITCODE -eq 0) {
-      Write-Result "PAIR=$a,$b"
+      Write-Result "PAIRS=$a,$b"
       exit 0
     }
     if ($installOutput -match 'already|exist|in use|占用|已存在') {
@@ -1303,7 +1334,6 @@ async function createCom0comPairElevated(setupc, usedKeys) {
 
   const launched = await execFileAsync('powershell.exe', [
     '-NoProfile',
-    '-NonInteractive',
     '-Command',
     command
   ])
@@ -1315,9 +1345,22 @@ async function createCom0comPairElevated(setupc, usedKeys) {
   }
   fs.unlink(outputPath).catch(() => {})
 
+  const pairList = /PAIRS=([^\r\n]+)/i.exec(output)
+  if (pairList) {
+    const pairs = pairList[1]
+      .split(';')
+      .map((item) => {
+        const [a, b] = item.split(',')
+        return a && b
+          ? { a: a.trim().toUpperCase(), b: b.trim().toUpperCase() }
+          : null
+      })
+      .filter(Boolean)
+    if (pairs.length) return { pairs }
+  }
   const pair = /PAIR=(COM\d+),(COM\d+)/i.exec(output)
   if (pair) {
-    return { pair: { a: pair[1].toUpperCase(), b: pair[2].toUpperCase() } }
+    return { pairs: [{ a: pair[1].toUpperCase(), b: pair[2].toUpperCase() }] }
   }
   const detail = /ERROR=([^\r\n]+)/i.exec(output)
   return {
@@ -1328,6 +1371,16 @@ async function createCom0comPairElevated(setupc, usedKeys) {
       launched?.error?.message ||
       'UAC 已取消或 com0com 脚本未执行'
   }
+}
+
+async function uninstallCom0comElevated(setupc) {
+  const command = [
+    `$p = Start-Process -FilePath ${quotePowerShell(setupc)}`,
+    `-WorkingDirectory ${quotePowerShell(path.dirname(setupc))}`,
+    `-ArgumentList 'uninstall' -Verb RunAs -PassThru -Wait;`,
+    'exit $p.ExitCode'
+  ].join(' ')
+  return execFileAsync('powershell.exe', ['-NoProfile', '-Command', command])
 }
 
 function usedComPairKeys() {
@@ -1350,36 +1403,28 @@ function withCom0comQueue(task) {
   return run
 }
 
-async function ensureCom0comPair(setupc, listOutput) {
-  const pairs = parseComPairs(listOutput)
-  const used = usedComPairKeys()
-  const existing = pairs.find((pair) => !used.has(`${pair.a}|${pair.b}`))
-  if (existing) return { pair: existing }
-
-  let maxPort = 3
-  for (const match of listOutput.matchAll(/COM(\d+)/gi)) {
-    maxPort = Math.max(maxPort, Number(match[1]))
-  }
-
-  const nameA = `COM${maxPort + 2}`
-  const nameB = `COM${maxPort + 3}`
-  const result = await execFileAsync(
-    setupc,
-    ['install', `PortName=${nameA}`, `PortName=${nameB}`],
-    { cwd: path.dirname(setupc) }
-  )
-  if (!result.error) return { pair: { a: nameA, b: nameB } }
-
-  // 普通权限下 setupc 会返回 EACCES；也可能是端口名已被占用。
-  // 统一走一次管理员脚本：重新读取端口对、复用空闲对或创建新对。
-  const detail = com0comErrorDetail(result)
-  const elevated = await createCom0comPairElevated(setupc, [
-    ...usedComPairKeys()
-  ])
-  if (elevated.pair) return { pair: elevated.pair }
-  return {
-    error: elevated.error || '创建 com0com 端口对失败',
-    detail: elevated.detail || detail
+async function openWindowsComPort(path) {
+  let port
+  try {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        port = new SerialPort({ path, baudRate: 115200, autoOpen: false })
+        await new Promise((resolve, reject) => {
+          port.open((error) => (error ? reject(error) : resolve()))
+        })
+        return { port }
+      } catch (error) {
+        try {
+          port?.close(() => {})
+        } catch {
+          // 忽略失败端口的清理异常
+        }
+        if (attempt >= 5) return { error: error.message || String(error) }
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+    }
+  } catch (error) {
+    return { error: error.message || String(error) }
   }
 }
 
@@ -1397,59 +1442,74 @@ async function createWindowsVirtualPort({ portId, ownerId, rules }) {
   }
 
   return withCom0comQueue(async () => {
-    const listed = await execFileAsync(setupc, ['list'], { cwd: path.dirname(setupc) })
-    // list 在没有端口对时可能返回非零退出码；即使读取失败也继续尝试创建
-    const listDetail = com0comErrorDetail(listed)
-    const ensured = await ensureCom0comPair(setupc, listed.stdout)
-    if (ensured.error) {
-      return {
-        ok: false,
-        error: ensured.error,
-        hint: [ensured.detail, listDetail].filter(Boolean).join(' · ') ||
-          '请以管理员身份运行本应用，或先在 com0com Setup 中创建一对端口'
-      }
-    }
-    const pair = ensured.pair
-    let port
-    try {
-      // 新建的 com0com 端口偶尔需要一点时间才可打开，短暂重试几次
-      for (let attempt = 0; ; attempt += 1) {
-        try {
-          port = new SerialPort({ path: pair.a, baudRate: 115200, autoOpen: false })
-          await new Promise((resolve, reject) => {
-            port.open((error) => (error ? reject(error) : resolve()))
-          })
-          break
-        } catch (error) {
-          if (attempt >= 5) throw error
-          await new Promise((resolve) => setTimeout(resolve, 250))
+    let lastError = ''
+    let fetched = false
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      let pair = takePairFromPool()
+      if (!pair) {
+        if (fetched) break
+        fetched = true
+        const used = new Set([
+          ...usedComPairKeys(),
+          ...windowsPairPool.map((item) => pairKey(item))
+        ])
+        const result = await createCom0comPairElevated(setupc, [...used])
+        if (result.pairs?.length) {
+          result.pairs.forEach(addPairToPool)
+          continue
+        }
+        return {
+          ok: false,
+          error: result.error || '创建 com0com 端口对失败',
+          hint:
+            result.detail ||
+            '请确认 UAC 已通过，并检查 com0com 是否安装完成'
         }
       }
-    } catch (error) {
-      return { ok: false, error: error.message || String(error) }
-    }
-    const state = {
-      kind: 'com',
-      port,
-      ownerId,
-      externalPath: pair.b,
-      internalPath: pair.a,
-      pairKey: `${pair.a}|${pair.b}`,
-      rules: compileRules(rules),
-      matcher: createMessageBuffer(),
-      flushTimer: null,
-      log: []
-    }
-    virtualPorts.set(portId, state)
-    port.on('data', (buffer) => handleVirtualIncoming(portId, buffer))
-    port.on('close', () => {
-      if (virtualPorts.get(portId) === state) {
-        virtualPorts.delete(portId)
-        emitVirtual(ownerId, portId, { type: 'status', status: 'closed' })
+
+      const opened = await openWindowsComPort(pair.a)
+      if (opened.error) {
+        lastError = opened.error
+        continue
       }
-    })
-    port.on('error', () => {})
-    return { ok: true, externalPath: pair.b, internalPath: pair.a, platform: 'win32' }
+
+      const port = opened.port
+      const state = {
+        kind: 'com',
+        port,
+        ownerId,
+        externalPath: pair.b,
+        internalPath: pair.a,
+        pairKey: pairKey(pair),
+        rules: compileRules(rules),
+        matcher: createMessageBuffer(),
+        flushTimer: null,
+        log: []
+      }
+      virtualPorts.set(portId, state)
+      port.on('data', (buffer) => handleVirtualIncoming(portId, buffer))
+      port.on('close', () => {
+        if (virtualPorts.get(portId) === state) {
+          virtualPorts.delete(portId)
+          addPairToPool({ a: state.internalPath, b: state.externalPath })
+          emitVirtual(ownerId, portId, { type: 'status', status: 'closed' })
+        }
+      })
+      port.on('error', () => {})
+      return {
+        ok: true,
+        externalPath: pair.b,
+        internalPath: pair.a,
+        platform: 'win32'
+      }
+    }
+
+    return {
+      ok: false,
+      error: '创建 com0com 端口失败',
+      hint: lastError || '端口可能被其他程序占用，请重试或换一对端口'
+    }
   })
 }
 
@@ -1477,6 +1537,26 @@ ipcMain.handle('virtual:install-com0com', async () => {
   const error = await shell.openPath(installer)
   if (error) return { ok: false, error }
   return { ok: true }
+})
+
+ipcMain.handle('virtual:uninstall-com0com', async () => {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: '只有 Windows 使用 com0com' }
+  }
+  const setupc = com0comSetupPath()
+  if (!setupc) {
+    return { ok: false, error: '未检测到 com0com' }
+  }
+  for (const portId of [...virtualPorts.keys()]) closeVirtual(portId)
+  windowsPairPool.length = 0
+  const result = await uninstallCom0comElevated(setupc)
+  if (result.error) {
+    return {
+      ok: false,
+      error: com0comErrorDetail(result) || '卸载 com0com 失败'
+    }
+  }
+  return { ok: true, reboot: true }
 })
 
 ipcMain.handle('virtual:close', async (_event, payload = {}) => {

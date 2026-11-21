@@ -86,6 +86,9 @@ export default function VirtualPortPage({
   const [copiedId, setCopiedId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState('');
   const [clearAllOpen, setClearAllOpen] = useState(false);
+  const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [uninstallBusy, setUninstallBusy] = useState(false);
+  const [uninstallResult, setUninstallResult] = useState('');
   const platform = window.terminalAPI?.platform || '';
   const logRef = useRef(null);
   const followRef = useRef(true);
@@ -583,15 +586,29 @@ export default function VirtualPortPage({
                           title={
                             rt.status === 'error'
                               ? [rt.error, rt.hint].filter(Boolean).join(' · ')
-                              : '虚拟串口 · 波特率 115200'
+                              : platform === 'win32' && rt.externalPath
+                                ? `第三方软件使用 ${rt.externalPath} · 本应用内部占用 ${rt.internalPath}`
+                                : '虚拟串口 · 波特率 115200'
                           }
                         >
                           {rt.status === 'error'
                             ? rt.error
-                            : '波特率 115200'}
+                            : platform === 'win32' && rt.externalPath
+                              ? '第三方软件使用'
+                              : '波特率 115200'}
                         </span>
                       </span>
                     </button>
+
+                    {rt.status === 'ready' &&
+                    platform === 'win32' &&
+                    rt.externalPath ? (
+                      <p className="virtual-port-usage">
+                        第三方软件打开 <code>{rt.externalPath}</code>
+                        <span>·</span>
+                        本应用占用 <code>{rt.internalPath}</code>
+                      </p>
+                    ) : null}
 
                     {rt.status === 'error' && rt.hint ? (
                       <p className="virtual-port-hint" title={rt.hint}>
@@ -638,7 +655,11 @@ export default function VirtualPortPage({
                             name={copiedId === port.id ? 'check' : 'copy'}
                             size={13}
                           />
-                          {copiedId === port.id ? '已复制' : '复制路径'}
+                          {copiedId === port.id
+                            ? '已复制'
+                            : platform === 'win32'
+                              ? '复制外部端口'
+                              : '复制路径'}
                         </button>
                       )}
                       <button
@@ -675,9 +696,25 @@ export default function VirtualPortPage({
               清空全部虚拟串口
             </button>
 
+            {platform === 'win32' ? (
+              <button
+                type="button"
+                className="virtual-uninstall-com0com"
+                onClick={() => {
+                  setUninstallResult('');
+                  setUninstallOpen(true);
+                }}
+              >
+                <Icon name="trash" size={12} />
+                卸载 com0com
+              </button>
+            ) : null}
+
             <p className="virtual-note">
               {platform === 'win32'
-                ? 'Windows 使用 com0com 创建端口对（需先安装 com0com），新建后会自动分配一对 COM 端口；把另一个 COM 端口给第三方工具打开即可，波特率 115200。'
+                ? activeRuntime.externalPath
+                  ? `第三方软件请打开 ${activeRuntime.externalPath}；本应用内部占用 ${activeRuntime.internalPath}，不要打开它。波特率 115200。`
+                  : 'Windows 使用 com0com 创建端口对（需先安装 com0com），新建后会自动分配一对 COM 端口；把外部端口给第三方软件打开即可，波特率 115200。'
                 : '用支持手填设备路径的工具打开选中的端口，波特率 115200。虚拟串口是 PTY，系统串口列表里看不到；关闭此页面会释放全部端口。'}
             </p>
           </aside>
@@ -918,6 +955,83 @@ export default function VirtualPortPage({
           </div>
         </div>
       </div>
+
+      {uninstallOpen ? (
+        <Modal
+          title="卸载 com0com"
+          width={440}
+          tone="danger"
+          icon={<Icon name="trash" size={15} />}
+          onClose={() => {
+            if (uninstallBusy) return;
+            setUninstallOpen(false);
+          }}
+          footer={
+            uninstallResult ? (
+              <button
+                type="button"
+                className="soft-btn"
+                onClick={() => setUninstallOpen(false)}
+              >
+                关闭
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="soft-btn"
+                  disabled={uninstallBusy}
+                  onClick={() => setUninstallOpen(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="danger-btn"
+                  disabled={uninstallBusy}
+                  onClick={async () => {
+                    setUninstallBusy(true);
+                    setUninstallResult('');
+                    const result =
+                      await window.terminalAPI?.virtual
+                        ?.uninstallCom0com?.()
+                        ?.catch?.((error) => ({
+                          ok: false,
+                          error: error?.message || String(error)
+                        }));
+                    setUninstallBusy(false);
+                    if (result?.ok) {
+                      clearAllPorts();
+                      setUninstallResult(
+                        'com0com 已卸载。请重启电脑后再重新创建虚拟串口。'
+                      );
+                    } else {
+                      setUninstallResult(
+                        result?.error || '卸载 com0com 失败'
+                      );
+                    }
+                  }}
+                >
+                  {uninstallBusy ? '正在卸载…' : '卸载'}
+                </button>
+              </>
+            )
+          }
+        >
+          {uninstallResult ? (
+            <p className="virtual-confirm-text">{uninstallResult}</p>
+          ) : (
+            <>
+              <p className="virtual-confirm-text">
+                将卸载 com0com 驱动，并关闭当前所有虚拟串口。系统中由 com0com 创建的 COM 端口对也会一并移除。
+              </p>
+              <p className="virtual-confirm-note">
+                卸载需要管理员权限，完成后通常需要重启电脑。若其他程序仍在使用这些虚拟端口，请先关闭它们。
+              </p>
+            </>
+          )}
+        </Modal>
+      ) : null}
 
       {clearAllOpen ? (
         <Modal
