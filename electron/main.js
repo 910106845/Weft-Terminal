@@ -1286,7 +1286,7 @@ async function ensureCom0comPair(setupc, listOutput) {
       maxPort += 2
       continue
     }
-    if (/access|elevat|administrator|denied|拒绝访问|管理员|权限|0x5\b/i.test(detail)) {
+    if (/access|elevat|administrator|denied|拒绝访问|管理员|权限|0x5\b|EACCES|EPERM/i.test(detail)) {
       const elevated = await installCom0comPairElevated(setupc, nameA, nameB)
       if (elevated.ok) return { pair: { a: nameA, b: nameB } }
       return {
