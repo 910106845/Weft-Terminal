@@ -99,6 +99,56 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* 主题切换：以按钮为圆心、带柔和边缘和聚焦感的光晕扩散 */
+@property --vt-theme-r {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+  --vt-theme-r: var(--theme-r0, 0px);
+  -webkit-mask-image: radial-gradient(
+    circle var(--vt-theme-r) at var(--theme-x, 50%) var(--theme-y, 50%),
+    #000 0%,
+    #000 90%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    circle var(--vt-theme-r) at var(--theme-x, 50%) var(--theme-y, 50%),
+    #000 0%,
+    #000 90%,
+    transparent 100%
+  );
+  filter: drop-shadow(
+    0 0 18px color-mix(in srgb, var(--accent) 45%, transparent)
+  );
+  animation-name: theme-bloom;
+  animation-duration: var(--theme-bloom-duration, 780ms);
+  animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  animation-fill-mode: both;
+}
+
+@keyframes theme-bloom {
+  from {
+    --vt-theme-r: var(--theme-r0, 0px);
+  }
+  to {
+    --vt-theme-r: var(--theme-radius, 120vmax);
+  }
+}
+
 button,
 input,
 select,

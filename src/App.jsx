@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import HomePage from './components/HomePage'
 import { LiquidGlassFilter } from './components/LiquidGlass'
 import SessionPage from './components/SessionPage'
@@ -379,6 +380,7 @@ export default function App() {
   const appToastTimerRef = useRef(null)
   const addMenuWrapRef = useRef(null)
   const tabListWrapRef = useRef(null)
+  const themeTransitionRef = useRef(false)
 
   const showAppToast = useCallback((message, kind = 'success') => {
     setAppToast({ message, kind })
@@ -412,9 +414,54 @@ export default function App() {
     return () => media.removeEventListener('change', apply)
   }, [themePref])
 
-  const onToggleTheme = useCallback(() => {
-    setThemePref(resolvedTheme === 'dark' ? 'light' : 'dark')
-  }, [resolvedTheme, setThemePref])
+  const onToggleTheme = useCallback(
+    (event) => {
+      const next = resolvedTheme === 'dark' ? 'light' : 'dark'
+      const reduceMotion = window.matchMedia(
+        '(prefers-reduced-motion: reduce)'
+      ).matches
+      if (
+        reduceMotion ||
+        typeof document.startViewTransition !== 'function'
+      ) {
+        setThemePref(next)
+        return
+      }
+      if (themeTransitionRef.current) return
+
+      const rect = event?.currentTarget?.getBoundingClientRect?.()
+      const x = rect ? rect.left + rect.width / 2 : window.innerWidth - 44
+      const y = rect ? rect.top + rect.height / 2 : 40
+      const radius = Math.hypot(
+        Math.max(x, window.innerWidth - x),
+        Math.max(y, window.innerHeight - y)
+      )
+      const root = document.documentElement
+      const startRadius = Math.max(12, rect ? rect.width / 2 : 16)
+      root.style.setProperty('--theme-x', `${x}px`)
+      root.style.setProperty('--theme-y', `${y}px`)
+      root.style.setProperty('--theme-r0', `${startRadius}px`)
+      root.style.setProperty('--theme-radius', `${radius * 1.16}px`)
+
+      themeTransitionRef.current = true
+      try {
+        const transition = document.startViewTransition(() => {
+          root.dataset.theme = next
+          flushSync(() => {
+            setThemePref(next)
+            setResolvedTheme(next)
+          })
+        })
+        transition.finished.finally(() => {
+          themeTransitionRef.current = false
+        })
+      } catch {
+        themeTransitionRef.current = false
+        setThemePref(next)
+      }
+    },
+    [resolvedTheme, setThemePref]
+  )
 
   useEffect(() => {
     saveJSON(
