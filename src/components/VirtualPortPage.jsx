@@ -645,7 +645,7 @@ export default function VirtualPortPage({
 
             <p className="virtual-note">
               {platform === 'win32'
-                ? 'Windows 使用 com0com 创建端口对，新建后会自动分配一对 COM 端口；把另一个 COM 端口给第三方工具打开即可，波特率 115200。'
+                ? 'Windows 使用 com0com 创建端口对（需先安装 com0com），新建后会自动分配一对 COM 端口；把另一个 COM 端口给第三方工具打开即可，波特率 115200。'
                 : '用支持手填设备路径的工具打开选中的端口，波特率 115200。虚拟串口是 PTY，系统串口列表里看不到；关闭此页面会释放全部端口。'}
             </p>
           </aside>
