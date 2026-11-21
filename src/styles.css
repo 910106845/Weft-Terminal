@@ -7155,6 +7155,18 @@ button:focus-visible,
   color: var(--danger);
 }
 
+.virtual-port-hint {
+  margin: 8px 2px 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .virtual-port-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

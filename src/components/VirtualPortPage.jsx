@@ -577,6 +577,12 @@ export default function VirtualPortPage({
                       </span>
                     </button>
 
+                    {rt.status === 'error' && rt.hint ? (
+                      <p className="virtual-port-hint" title={rt.hint}>
+                        {rt.hint}
+                      </p>
+                    ) : null}
+
                     <div className="virtual-port-actions">
                       {rt.status === 'error' ? (
                         <>

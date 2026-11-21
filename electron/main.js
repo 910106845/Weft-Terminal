@@ -1158,8 +1158,14 @@ function com0comDir() {
 
 function com0comSetupPath() {
   const bundled = com0comDir()
+  const programDirs = [
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.ProgramW6432
+  ].filter(Boolean)
   const candidates = [
     bundled ? path.join(bundled, 'setupc.exe') : '',
+    ...programDirs.map((dir) => path.join(dir, 'com0com', 'setupc.exe')),
     'C:\\Program Files (x86)\\com0com\\setupc.exe',
     'C:\\Program Files\\com0com\\setupc.exe'
   ].filter(Boolean)
@@ -1198,9 +1204,39 @@ function parseComPairs(output) {
 
 function execFileAsync(file, args) {
   return new Promise((resolve) => {
-    execFile(file, args, { windowsHide: true }, (error, stdout) => {
-      resolve({ error, stdout: stdout || '' })
+    execFile(file, args, { windowsHide: true }, (error, stdout, stderr) => {
+      resolve({ error, stdout: stdout || '', stderr: stderr || '' })
     })
+  })
+}
+
+function com0comErrorDetail(result) {
+  if (!result) return ''
+  const message = result.error?.message || ''
+  const stderr = result.stderr || ''
+  return [message, stderr].filter(Boolean).join(' ').trim()
+}
+
+function installCom0comPairElevated(setupc, nameA, nameB) {
+  return new Promise((resolve) => {
+    const file = String(setupc).replace(/'/g, "''")
+    const command = [
+      `$p = Start-Process -FilePath '${file}'`,
+      `-ArgumentList @('install','PortName=${nameA}','PortName=${nameB}')`,
+      '-Verb RunAs -PassThru -Wait;',
+      'exit $p.ExitCode'
+    ].join(' ')
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', command],
+      { windowsHide: true },
+      (error, _stdout, stderr) => {
+        resolve({
+          ok: !error,
+          error: error ? [stderr, error.message].filter(Boolean).join(' ') : ''
+        })
+      }
+    )
   })
 }
 
@@ -1244,14 +1280,23 @@ async function ensureCom0comPair(setupc, listOutput) {
       `PortName=${nameB}`
     ])
     if (!result.error) return { pair: { a: nameA, b: nameB } }
-    const message = String(result.error.message || '创建端口对失败')
-    if (/already|exist|in use|duplicate|占用|已存在/i.test(message)) {
+
+    const detail = com0comErrorDetail(result)
+    if (/already|exist|in use|duplicate|占用|已存在/i.test(detail)) {
       maxPort += 2
       continue
     }
-    return { error: message }
+    if (/access|elevat|administrator|denied|拒绝访问|管理员|权限|0x5\b/i.test(detail)) {
+      const elevated = await installCom0comPairElevated(setupc, nameA, nameB)
+      if (elevated.ok) return { pair: { a: nameA, b: nameB } }
+      return {
+        error: '创建 com0com 端口对失败',
+        detail: elevated.error || detail
+      }
+    }
+    return { error: '创建 com0com 端口对失败', detail: detail || 'setupc install 执行失败' }
   }
-  return { error: '创建 com0com 端口对失败' }
+  return { error: '创建 com0com 端口对失败', detail: '端口名冲突，请手动在 com0com 中创建端口对' }
 }
 
 async function createWindowsVirtualPort({ portId, ownerId, rules }) {
@@ -1269,19 +1314,15 @@ async function createWindowsVirtualPort({ portId, ownerId, rules }) {
 
   return withCom0comQueue(async () => {
     const listed = await execFileAsync(setupc, ['list'])
-    if (listed.error) {
-      return {
-        ok: false,
-        error: '无法读取 com0com 端口对',
-        hint: listed.error.message || '请确认 com0com 已正确安装'
-      }
-    }
+    // list 在没有端口对时可能返回非零退出码；即使读取失败也继续尝试创建
+    const listDetail = com0comErrorDetail(listed)
     const ensured = await ensureCom0comPair(setupc, listed.stdout)
     if (ensured.error) {
       return {
         ok: false,
         error: ensured.error,
-        hint: '请以管理员身份运行本应用，或先在 com0com Setup 中创建一对端口'
+        hint: [ensured.detail, listDetail].filter(Boolean).join(' · ') ||
+          '请以管理员身份运行本应用，或先在 com0com Setup 中创建一对端口'
       }
     }
     const pair = ensured.pair
