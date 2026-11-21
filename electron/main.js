@@ -1017,6 +1017,14 @@ const VIRTUAL_LOG_LIMIT = 400
 // 没有换行结尾的数据，安静这么久后当作一条完整消息
 const VIRTUAL_IDLE_MS = 80
 
+function notifySerialPortsChanged() {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('serial:ports-changed')
+    }
+  }
+}
+
 function emitVirtual(ownerId, portId, payload) {
   sendToOwner(ownerId, 'virtual:event', { portId, ...payload })
 }
@@ -1190,6 +1198,32 @@ function com0comDir() {
     : ''
 }
 
+function com0comLogPath() {
+  return path.join(app.getPath('userData'), 'logs', 'com0com.log')
+}
+
+async function logCom0com(message, data) {
+  try {
+    const file = com0comLogPath()
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    const stat = await fs.stat(file).catch(() => null)
+    if (stat && stat.size > 2 * 1024 * 1024) {
+      await fs.rename(file, `${file}.1`).catch(() => {})
+    }
+    const payload =
+      data === undefined
+        ? ''
+        : ` ${typeof data === 'string' ? data : JSON.stringify(data)}`
+    await fs.appendFile(
+      file,
+      `[${new Date().toISOString()}] ${message}${payload}\n`,
+      'utf8'
+    )
+  } catch {
+    // 日志写入失败不影响主流程
+  }
+}
+
 function com0comSetupPath() {
   const bundled = com0comDir()
   const programDirs = [
@@ -1220,8 +1254,10 @@ function com0comInstallerPath() {
 function parseComPairEntries(output) {
   const ports = new Map()
   output.split(/\r?\n/).forEach((line) => {
-    const match = /(CNC[AB]\d+)\s+PortName=(COM#|COM\d+)/i.exec(line.trim())
-    if (match) ports.set(match[1].toUpperCase(), match[2].toUpperCase())
+    const cnc = /(CNC[AB]\d+)/i.exec(line.trim())
+    if (!cnc) return
+    const name = /PortName=(COM#|COM\d+)/i.exec(line)
+    ports.set(cnc[1].toUpperCase(), name ? name[1].toUpperCase() : 'COM#')
   })
   const entries = []
   const seen = new Set()
@@ -1253,6 +1289,7 @@ function removePairFromPool(a, b) {
 async function removeCom0comPair(setupc, a, b) {
   const cwd = path.dirname(setupc)
   const listed = await execFileAsync(setupc, ['list'], { cwd })
+  await logCom0com('remove:list', { a, b, output: listed.stdout, detail: com0comErrorDetail(listed) })
   if (listed.error) {
     return { ok: false, error: com0comErrorDetail(listed) }
   }
@@ -1268,8 +1305,12 @@ async function removeCom0comPair(setupc, a, b) {
       ['remove', entry.cncA, entry.cncB],
       { cwd }
     )
-    if (!removed.error) return { ok: true }
+    if (!removed.error) {
+      await logCom0com('remove:ok', { a, b, cncA: entry.cncA, cncB: entry.cncB })
+      return { ok: true }
+    }
     detail = com0comErrorDetail(removed)
+    await logCom0com('remove:failed', { a, b, cncA: entry.cncA, cncB: entry.cncB, detail })
     if (!/open|busy|使用|占用/i.test(detail)) break
     await new Promise((resolve) => setTimeout(resolve, 260))
   }
@@ -1332,8 +1373,13 @@ try {
   $listOutput = (& $Setupc list 2>&1 | Out-String)
   $ports = @{}
   foreach ($line in ($listOutput -split "\\r?\\n")) {
-    if ($line -match '(CNC[AB]\\d+)\\s+PortName=(COM\\d+)') {
-      $ports[$matches[1].ToUpper()] = $matches[2].ToUpper()
+    if ($line -match '(CNC[AB]\\d+)') {
+      $key = $matches[1].ToUpper()
+      if ($line -match 'PortName=(COM#|COM\\d+)') {
+        $ports[$key] = $matches[1].ToUpper()
+      } else {
+        $ports[$key] = 'COM#'
+      }
     }
   }
   $usedSet = @{}
@@ -1349,8 +1395,8 @@ try {
         $b = $ports[$partner]
         if (
           -not $usedSet.ContainsKey("$a|$b") -and
-          $a -match '^COM\d+$' -and
-          $b -match '^COM\d+$'
+          $a -match '^COM\\d+$' -and
+          $b -match '^COM\\d+$'
         ) {
           $free += "$a,$b"
         }
@@ -1379,7 +1425,7 @@ try {
   }
   $comDb = @()
   try {
-    $comDb = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\COM Name Arbiter' -Name ComDB -ErrorAction Stop).ComDB
+    $comDb = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\COM Name Arbiter' -Name ComDB -ErrorAction Stop).ComDB
   } catch {
     $comDb = @()
   }
@@ -1416,7 +1462,7 @@ try {
     # 先用默认名字建对，再分别改名，避免 install 把同一个 PortName 套到两端
     $installOutput = (& $Setupc install - - 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) {
-      Write-Result ('ERROR=' + (($installOutput -replace '\r?\n', ' ').Trim()))
+      Write-Result ('ERROR=' + (($installOutput -replace '\\r?\\n', ' ').Trim()))
       exit 0
     }
 
@@ -1426,9 +1472,14 @@ try {
       Start-Sleep -Milliseconds 300
       $listAfter = (& $Setupc list 2>&1 | Out-String)
       $afterPorts = @{}
-      foreach ($line in ($listAfter -split "\r?\n")) {
-        if ($line -match '(CNC[AB]\d+)\s+PortName=(COM#|COM\d+)') {
-          $afterPorts[$matches[1].ToUpper()] = $matches[2].ToUpper()
+      foreach ($line in ($listAfter -split "\\r?\\n")) {
+        if ($line -match '(CNC[AB]\\d+)') {
+          $key = $matches[1].ToUpper()
+          if ($line -match 'PortName=(COM#|COM\\d+)') {
+            $afterPorts[$key] = $matches[1].ToUpper()
+          } else {
+            $afterPorts[$key] = 'COM#'
+          }
         }
       }
       foreach ($key in @($afterPorts.Keys)) {
@@ -1463,7 +1514,7 @@ try {
     if ($changeOutput -match 'already|exist|in use|占用|已存在') {
       continue
     }
-    Write-Result ('ERROR=' + (($changeOutput -replace '\r?\n', ' ').Trim()))
+    Write-Result ('ERROR=' + (($changeOutput -replace '\\r?\\n', ' ').Trim()))
     exit 0
   }
   Write-Result 'ERROR=创建端口对失败：没有找到可用的 COM 端口名'
@@ -1496,6 +1547,12 @@ async function runCom0comPairScript(setupc, usedKeys) {
     // UAC 被取消或脚本没有写出结果
   }
   fs.unlink(outputPath).catch(() => {})
+  await logCom0com('pair-script:result', {
+    usedKeys,
+    error: launched?.error?.message || '',
+    stderr: launched?.stderr || '',
+    output: output.trim()
+  })
 
   const pairList = /PAIRS=([^\r\n]+)/i.exec(output)
   if (pairList) {
@@ -1653,7 +1710,9 @@ async function openWindowsComPort(path) {
 }
 
 async function createWindowsVirtualPort({ portId, ownerId, rules }) {
-  if (!(await isWindowsAdmin())) {
+  const admin = await isWindowsAdmin()
+  await logCom0com('create:start', { portId, admin, setupc: com0comSetupPath() })
+  if (!admin) {
     return {
       ok: false,
       error: '需要管理员权限',
@@ -1736,6 +1795,7 @@ async function createWindowsVirtualPort({ portId, ownerId, rules }) {
       })
       port.on('error', () => {})
       windowsSerialPortCache.at = 0
+      notifySerialPortsChanged()
       return {
         ok: true,
         externalPath: pair.b,
@@ -1804,8 +1864,16 @@ ipcMain.handle('virtual:uninstall-com0com', async () => {
   }
   for (const portId of [...virtualPorts.keys()]) closeVirtual(portId)
   windowsPairPool.length = 0
+  await logCom0com('uninstall:start', { setupc })
   const result = await uninstallCom0com(setupc)
+  await logCom0com('uninstall:result', {
+    error: result.error?.message || '',
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+    official: Boolean(result.official)
+  })
   windowsSerialPortCache.at = 0
+  notifySerialPortsChanged()
   if (result.error && result.error.code !== 3010) {
     return {
       ok: false,
@@ -1818,6 +1886,18 @@ ipcMain.handle('virtual:uninstall-com0com', async () => {
 ipcMain.handle('app:is-admin', async () => ({
   admin: await isWindowsAdmin()
 }))
+
+ipcMain.handle('virtual:open-com0com-log', async () => {
+  const file = com0comLogPath()
+  try {
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.appendFile(file, '', 'utf8')
+    shell.showItemInFolder(file)
+  } catch (error) {
+    return { ok: false, error: error.message || String(error) }
+  }
+  return { ok: true, path: file }
+})
 
 ipcMain.handle('virtual:com0com-status', async () => {
   if (process.platform !== 'win32') {
@@ -1872,6 +1952,7 @@ ipcMain.handle('virtual:clean-com0com', async () => {
     return { ok: false, error: com0comErrorDetail(listed) }
   }
   const entries = parseComPairEntries(listed.stdout)
+  await logCom0com('clean:list', { count: entries.length, output: listed.stdout })
   let removed = 0
   for (const entry of entries) {
     const result = await execFileAsync(
@@ -1880,8 +1961,11 @@ ipcMain.handle('virtual:clean-com0com', async () => {
       { cwd }
     )
     if (!result.error) removed += 1
+    else await logCom0com('clean:remove-failed', { entry, detail: com0comErrorDetail(result) })
   }
   windowsSerialPortCache.at = 0
+  await logCom0com('clean:done', { removed, total: entries.length })
+  notifySerialPortsChanged()
   return { ok: true, removed, total: entries.length }
 })
 
@@ -1922,6 +2006,7 @@ ipcMain.handle('virtual:remove', async (_event, payload = {}) => {
     if (!result.ok) return result
     virtualPorts.delete(portId)
     windowsSerialPortCache.at = 0
+    notifySerialPortsChanged()
     return { ok: true, pairRemoved: true }
   }
 

@@ -24,7 +24,8 @@ contextBridge.exposeInMainWorld('serialAPI', {
     ipcRenderer.invoke('app:export-favorites', { content, name }),
   importFavorites: () => ipcRenderer.invoke('app:import-favorites'),
   onData: (callback) => subscribe('serial:data', callback),
-  onStatus: (callback) => subscribe('serial:status', callback)
+  onStatus: (callback) => subscribe('serial:status', callback),
+  onPortsChanged: (callback) => subscribe('serial:ports-changed', callback)
 })
 
 contextBridge.exposeInMainWorld('terminalAPI', {
@@ -52,6 +53,7 @@ contextBridge.exposeInMainWorld('terminalAPI', {
     uninstallCom0com: () => ipcRenderer.invoke('virtual:uninstall-com0com'),
     com0comStatus: () => ipcRenderer.invoke('virtual:com0com-status'),
     cleanCom0com: () => ipcRenderer.invoke('virtual:clean-com0com'),
+    openCom0comLog: () => ipcRenderer.invoke('virtual:open-com0com-log'),
     setRules: (portId, rules) =>
       ipcRenderer.invoke('virtual:set-rules', { portId, rules }),
     onEvent: (callback) => subscribe('virtual:event', callback)

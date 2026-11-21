@@ -442,6 +442,11 @@ export default function SessionPage({
     }
   }, [])
 
+  useEffect(() => {
+    const off = window.serialAPI?.onPortsChanged?.(refreshPorts)
+    return off
+  }, [refreshPorts])
+
   const clearReceive = useCallback(() => {
     resetPending()
     if (flushTimerRef.current) {

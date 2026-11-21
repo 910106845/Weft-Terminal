@@ -498,6 +498,32 @@ export default function VirtualPortPage({
   const clearAllPorts = async () => {
     setClearError('');
     setClearBusy(true);
+    if (platform === 'win32' && com0comInstalled) {
+      const result = await window.terminalAPI?.virtual
+        ?.cleanCom0com?.()
+        ?.catch?.((error) => ({ ok: false, error: error?.message || String(error) }));
+      setClearBusy(false);
+      if (!result?.ok) {
+        setClearError(
+          result?.detail
+            ? `${result.error || '清理失败'}：${result.detail}`
+            : result?.error || '清理 com0com 端口失败'
+        );
+        return;
+      }
+      resetAllPortsState();
+      setCom0comPairs(0);
+      refreshCom0comStatus();
+      return;
+    }
+    if (platform === 'win32' && !com0comInstalled) {
+      portsRef.current.forEach((port) => {
+        window.terminalAPI?.virtual?.close(port.id);
+      });
+      setClearBusy(false);
+      resetAllPortsState();
+      return;
+    }
     const failed = [];
     for (const port of portsRef.current) {
       const result = await window.terminalAPI?.virtual
@@ -926,7 +952,11 @@ export default function VirtualPortPage({
                 setClearError('');
                 setClearAllOpen(true);
               }}
-              disabled={!ports.length || adminBlocked}
+              disabled={
+                adminBlocked ||
+                (!ports.length &&
+                  !(platform === 'win32' && com0comPairs > 0))
+              }
               title={
                 adminRequired
                   ? '请以管理员身份重新打开应用后再删除 com0com 端口对'
@@ -943,6 +973,18 @@ export default function VirtualPortPage({
                   <span>com0com</span>
                   <strong>{com0comPairs}</strong>
                   <span>对 · {com0comPairs * 2} 个 COM 口</span>
+                  <button
+                    type="button"
+                    className="virtual-com0com-refresh"
+                    onClick={() =>
+                      window.terminalAPI?.virtual
+                        ?.openCom0comLog?.()
+                        ?.catch?.(() => {})
+                    }
+                    title="打开 com0com 日志文件"
+                  >
+                    <Icon name="file" size={11} />
+                  </button>
                   <button
                     type="button"
                     className="virtual-com0com-refresh"
@@ -1382,7 +1424,7 @@ export default function VirtualPortPage({
           </p>
           {platform === 'win32' ? (
             <p className="virtual-confirm-note">
-              会同时从 com0com 删除这些虚拟串口对应的 COM 端口对。
+              会同时清理 com0com 中的全部 {com0comPairs} 对 COM 端口，包括之前失败留下的未命名端口对。
             </p>
           ) : null}
           {adminRequired ? (
