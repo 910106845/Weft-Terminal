@@ -1892,6 +1892,206 @@ ipcMain.handle('virtual:open-com0com-log', async () => {
   return { ok: true, path: file }
 })
 
+async function listCom0comPairs() {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: '只有 Windows 使用 com0com' }
+  }
+  if (!(await isWindowsAdmin())) {
+    return {
+      ok: false,
+      needsAdmin: true,
+      error: '需要管理员权限',
+      hint: '请以管理员身份重新打开 Weft Terminal 后再读取 com0com 端口'
+    }
+  }
+  const setupc = com0comSetupPath()
+  if (!setupc) return { ok: false, error: '未安装 com0com' }
+  const listed = await execFileAsync(setupc, ['--silent', 'list'], {
+    cwd: path.dirname(setupc),
+    timeout: 8000
+  })
+  if (listed.error) {
+    return { ok: false, error: com0comErrorDetail(listed) }
+  }
+  const pairs = parseComPairEntries(listed.stdout)
+  await logCom0com('list-pairs', { count: pairs.length, output: listed.stdout })
+  return { ok: true, pairs }
+}
+
+async function createCom0comPair() {
+  if (!(await isWindowsAdmin())) {
+    return {
+      ok: false,
+      needsAdmin: true,
+      error: '需要管理员权限',
+      hint: '请以管理员身份重新打开 Weft Terminal 后再新建虚拟串口'
+    }
+  }
+  const setupc = com0comSetupPath()
+  if (!setupc) return { ok: false, error: '未安装 com0com' }
+  const cwd = path.dirname(setupc)
+  const before = await listCom0comPairs()
+  if (!before.ok) return before
+  const beforeKeys = new Set(before.pairs.map((item) => item.cncA))
+  const install = await execFileAsync(
+    setupc,
+    ['--silent', 'install', 'PortName=COM#', 'PortName=COM#'],
+    { cwd, timeout: 30000 }
+  )
+  await logCom0com('create-pair:install', {
+    error: com0comErrorDetail(install),
+    stdout: install.stdout
+  })
+  if (install.error) {
+    return { ok: false, error: '创建端口对失败', detail: com0comErrorDetail(install) }
+  }
+
+  let entry = null
+  for (let i = 0; i < 20 && !entry; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const after = await listCom0comPairs()
+    if (!after.ok) return after
+    entry = after.pairs.find((item) => !beforeKeys.has(item.cncA)) || null
+  }
+  if (!entry) {
+    return { ok: false, error: '安装后未找到新端口对' }
+  }
+  const valid =
+    entry.a !== entry.b &&
+    /^COM\d+$/i.test(entry.a) &&
+    /^COM\d+$/i.test(entry.b)
+  if (!valid) {
+    await execFileAsync(
+      setupc,
+      ['--silent', 'remove', String(entry.index)],
+      { cwd, timeout: 15000 }
+    )
+    await logCom0com('create-pair:invalid', entry)
+    return {
+      ok: false,
+      error: 'Windows 没有分配有效的 COM 端口',
+      detail: `${entry.a} / ${entry.b}`
+    }
+  }
+  await logCom0com('create-pair:ok', entry)
+  windowsSerialPortCache.at = 0
+  notifySerialPortsChanged()
+  return { ok: true, pair: entry }
+}
+
+ipcMain.handle('virtual:list-com0com', async () => listCom0comPairs())
+
+ipcMain.handle('virtual:create-com0com', async () =>
+  withCom0comQueue(() => createCom0comPair())
+)
+
+ipcMain.handle('virtual:open-pair', async (_event, payload = {}) => {
+  const { portId, a, b, end } = payload
+  if (
+    !portId ||
+    !a ||
+    !b ||
+    String(a).toUpperCase() === String(b).toUpperCase() ||
+    !/^COM\d+$/i.test(String(a)) ||
+    !/^COM\d+$/i.test(String(b))
+  ) {
+    return { ok: false, error: '端口对参数无效' }
+  }
+  if (process.platform !== 'win32') {
+    return { ok: false, error: '只有 Windows 使用 com0com 端口对' }
+  }
+  const internal = end === 'b' ? b : a
+  const external = end === 'b' ? a : b
+  closeVirtual(portId)
+  let port
+  try {
+    port = new SerialPort({ path: internal, baudRate: 115200, autoOpen: false })
+    await new Promise((resolve, reject) => {
+      port.open((error) => (error ? reject(error) : resolve()))
+    })
+  } catch (error) {
+    try {
+      port?.close(() => {})
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: error.message || String(error) }
+  }
+  const state = {
+    kind: 'com',
+    port,
+    ownerId: _event.sender.id,
+    externalPath: external,
+    internalPath: internal,
+    pairKey: `${a}|${b}`,
+    rules: compileRules(payload.rules),
+    matcher: createMessageBuffer(),
+    flushTimer: null,
+    log: []
+  }
+  virtualPorts.set(portId, state)
+  port.on('data', (buffer) => handleVirtualIncoming(portId, buffer))
+  port.on('close', () => {
+    if (virtualPorts.get(portId) !== state) return
+    virtualPorts.delete(portId)
+    emitVirtual(_event.sender.id, portId, { type: 'status', status: 'closed' })
+  })
+  port.on('error', () => {})
+  await logCom0com('open-pair', { portId, internal, external })
+  return { ok: true, internalPath: internal, externalPath: external }
+})
+
+ipcMain.handle('virtual:remove-com0com', async (_event, payload = {}) => {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: '只有 Windows 使用 com0com' }
+  }
+  if (!(await isWindowsAdmin())) {
+    return {
+      ok: false,
+      needsAdmin: true,
+      error: '需要管理员权限',
+      hint: '请以管理员身份重新打开 Weft Terminal 后再删除端口对'
+    }
+  }
+  const setupc = com0comSetupPath()
+  if (!setupc) return { ok: false, error: '未安装 com0com' }
+  const index = Number(payload.index)
+  if (!Number.isInteger(index) || index < 0) {
+    return { ok: false, error: '端口对序号无效' }
+  }
+  removePairFromPool(payload.a, payload.b)
+  for (const [portId, state] of [...virtualPorts.entries()]) {
+    const key = state.pairKey
+    if (key && key.split('|').some((name) => name === payload.a || name === payload.b)) {
+      closeVirtual(portId)
+    }
+  }
+  const result = await execFileAsync(
+    setupc,
+    ['--silent', 'remove', String(index)],
+    { cwd: path.dirname(setupc), timeout: 15000 }
+  )
+  if (result.error) {
+    return { ok: false, error: '删除端口对失败', detail: com0comErrorDetail(result) }
+  }
+  const after = await execFileAsync(setupc, ['--silent', 'list'], {
+    cwd: path.dirname(setupc),
+    timeout: 8000
+  })
+  if (!after.error) {
+    const still = parseComPairEntries(after.stdout).some(
+      (item) => item.index === index
+    )
+    if (still) {
+      return { ok: false, error: '端口对仍然存在（可能被占用）' }
+    }
+  }
+  windowsSerialPortCache.at = 0
+  notifySerialPortsChanged()
+  await logCom0com('remove-pair', { index, a: payload.a, b: payload.b })
+  return { ok: true }
+})
+
 ipcMain.handle('virtual:com0com-status', async () => {
   if (process.platform !== 'win32') {
     return {

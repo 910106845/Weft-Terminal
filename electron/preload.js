@@ -52,6 +52,10 @@ contextBridge.exposeInMainWorld('terminalAPI', {
     installCom0com: () => ipcRenderer.invoke('virtual:install-com0com'),
     uninstallCom0com: () => ipcRenderer.invoke('virtual:uninstall-com0com'),
     com0comStatus: () => ipcRenderer.invoke('virtual:com0com-status'),
+    listCom0com: () => ipcRenderer.invoke('virtual:list-com0com'),
+    createCom0com: () => ipcRenderer.invoke('virtual:create-com0com'),
+    openPair: (payload) => ipcRenderer.invoke('virtual:open-pair', payload),
+    removeCom0com: (payload) => ipcRenderer.invoke('virtual:remove-com0com', payload),
     cleanCom0com: () => ipcRenderer.invoke('virtual:clean-com0com'),
     openCom0comLog: () => ipcRenderer.invoke('virtual:open-com0com-log'),
     setRules: (portId, rules) =>

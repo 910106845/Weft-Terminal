@@ -7134,6 +7134,92 @@ button:focus-visible,
   opacity: 0.55;
 }
 
+.wvp-pair-control {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wvp-end-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.wvp-end-choice > span {
+  margin-right: 2px;
+}
+
+.wvp-end-choice button {
+  flex: 1;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--card-btn-border);
+  border-radius: 7px;
+  background: var(--card-btn-bg);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.wvp-end-choice button.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.wvp-end-choice button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.wvp-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wvp-open-btn.is-on {
+  border-color: color-mix(in srgb, var(--danger) 36%, transparent);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.wvp-open-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.wvp-external {
+  margin: 8px 2px 0;
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.wvp-external code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
 .virtual-port-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

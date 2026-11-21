@@ -5,6 +5,7 @@ import { LiquidGlassFilter } from './components/LiquidGlass'
 import SessionPage from './components/SessionPage'
 import TerminalPage from './components/TerminalPage'
 import VirtualPortPage from './components/VirtualPortPage'
+import WindowsVirtualPage from './components/WindowsVirtualPage'
 import SshConnectDialog from './components/SshConnectDialog'
 import Modal from './components/Modal'
 import Icon from './components/Icons'
@@ -1359,15 +1360,26 @@ export default function App() {
             className={`session-host ${tab.id === activeTabId ? 'is-active' : ''}`}
           >
             {tab.kind === 'virtual' ? (
-              <VirtualPortPage
-                sessionId={tab.id}
-                active={tab.id === activeTabId}
-                accent={tabAccentOf(tab)}
-                statusAccent={tabStatusAccent(tab, resolvedTheme)}
-                tagAccent={tabTagAccent(tab)}
-                resolvedTheme={resolvedTheme}
-                onToggleTheme={onToggleTheme}
-              />
+              window.serialAPI?.platform === 'win32' ? (
+                <WindowsVirtualPage
+                  sessionId={tab.id}
+                  active={tab.id === activeTabId}
+                  accent={tabAccentOf(tab)}
+                  statusAccent={tabStatusAccent(tab, resolvedTheme)}
+                  tagAccent={tabTagAccent(tab)}
+                  resolvedTheme={resolvedTheme}
+                />
+              ) : (
+                <VirtualPortPage
+                  sessionId={tab.id}
+                  active={tab.id === activeTabId}
+                  accent={tabAccentOf(tab)}
+                  statusAccent={tabStatusAccent(tab, resolvedTheme)}
+                  tagAccent={tabTagAccent(tab)}
+                  resolvedTheme={resolvedTheme}
+                  onToggleTheme={onToggleTheme}
+                />
+              )
             ) : tab.kind === 'terminal' ? (
               <TerminalPage
                 key={`${tab.id}:${tab.sshRevision || 0}`}
