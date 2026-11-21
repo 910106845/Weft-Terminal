@@ -85,6 +85,7 @@ export default function VirtualPortPage({
   const [hexView, setHexView] = useState(false);
   const [copiedId, setCopiedId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState('');
+  const [clearAllOpen, setClearAllOpen] = useState(false);
   const platform = window.terminalAPI?.platform || '';
   const logRef = useRef(null);
   const followRef = useRef(true);
@@ -362,6 +363,21 @@ export default function VirtualPortPage({
     if (activePortId === portId) {
       setActivePortId(nextPorts[0]?.id || '');
     }
+  };
+
+  const clearAllPorts = () => {
+    portsRef.current.forEach((port) => {
+      window.terminalAPI?.virtual?.close(port.id);
+    });
+    setPorts([]);
+    setRuntime({});
+    setLogs({});
+    setLastRxAt({});
+    setActivePortId('');
+    setDeleteTarget('');
+    setClearAllOpen(false);
+    setCopiedId('');
+    syncedRulesRef.current = {};
   };
 
   const copyPath = async (port) => {
@@ -649,6 +665,16 @@ export default function VirtualPortPage({
               新建虚拟串口
             </button>
 
+            <button
+              type="button"
+              className="virtual-clear-all"
+              onClick={() => setClearAllOpen(true)}
+              disabled={!ports.length}
+            >
+              <Icon name="trash" size={13} />
+              清空全部虚拟串口
+            </button>
+
             <p className="virtual-note">
               {platform === 'win32'
                 ? 'Windows 使用 com0com 创建端口对（需先安装 com0com），新建后会自动分配一对 COM 端口；把另一个 COM 端口给第三方工具打开即可，波特率 115200。'
@@ -892,6 +918,43 @@ export default function VirtualPortPage({
           </div>
         </div>
       </div>
+
+      {clearAllOpen ? (
+        <Modal
+          title="清空所有虚拟串口"
+          width={420}
+          tone="danger"
+          icon={<Icon name="trash" size={15} />}
+          onClose={() => setClearAllOpen(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="soft-btn"
+                onClick={() => setClearAllOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="danger-btn"
+                onClick={clearAllPorts}
+              >
+                清空
+              </button>
+            </>
+          }
+        >
+          <p className="virtual-confirm-text">
+            将关闭当前页面的 {ports.length} 个虚拟串口，并删除它们的自动回复规则和收发记录。
+          </p>
+          {platform === 'win32' ? (
+            <p className="virtual-confirm-note">
+              com0com 已创建的端口对不会被自动删除，之后新建虚拟串口时会优先复用。
+            </p>
+          ) : null}
+        </Modal>
+      ) : null}
 
       {deletePort ? (
         <Modal
