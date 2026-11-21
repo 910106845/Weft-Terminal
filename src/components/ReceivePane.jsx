@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import Icon from './Icons'
 import { formatBytes, formatTime } from '../lib/format'
 import { parseAnsi, stripAnsi } from '../lib/ansi'
@@ -207,6 +207,8 @@ export default function ReceivePane({
 }) {
   const bodyRef = useRef(null)
   const searchInputRef = useRef(null)
+  // 多个串口标签同时挂载时 ID 必须唯一，否则渐变会引用到隐藏标签里的节点
+  const waveGradientId = `wave-gradient-${useId().replace(/:/g, '')}`
   const [atBottom, setAtBottom] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -431,7 +433,7 @@ export default function ReceivePane({
             <div className="empty-visual">
               <svg viewBox="0 0 260 84" aria-hidden="true">
                 <defs>
-                  <linearGradient id="wave-gradient" x1="0" y1="0" x2="1" y2="0">
+                  <linearGradient id={waveGradientId} x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.15" />
                     <stop offset="45%" stopColor="var(--accent)" stopOpacity="0.95" />
                     <stop offset="100%" stopColor="var(--mint)" stopOpacity="0.5" />
@@ -441,7 +443,7 @@ export default function ReceivePane({
                   className="empty-wave-line"
                   d="M0 42 H36 L48 18 L62 68 L76 28 L90 54 L102 42 H138 L150 22 L164 62 L178 34 L190 48 L202 42 H260"
                   fill="none"
-                  stroke="url(#wave-gradient)"
+                  stroke={`url(#${waveGradientId})`}
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
