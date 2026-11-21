@@ -1254,10 +1254,19 @@ function com0comInstallerPath() {
 function parseComPairEntries(output) {
   const ports = new Map()
   output.split(/\r?\n/).forEach((line) => {
-    const cnc = /(CNC[AB]\d+)/i.exec(line.trim())
+    const cnc = /(CNC[AB](\d+))/i.exec(line.trim())
     if (!cnc) return
-    const name = /PortName=(COM#|COM\d+)/i.exec(line)
-    ports.set(cnc[1].toUpperCase(), name ? name[1].toUpperCase() : 'COM#')
+    const key = cnc[1].toUpperCase()
+    const index = Number(cnc[2])
+    let name = 'COM#'
+    const real = /RealPortName=(COM\d+)/i.exec(line)
+    if (real) {
+      name = real[1].toUpperCase()
+    } else {
+      const port = /PortName=(COM#|COM\d+)/i.exec(line)
+      if (port) name = port[1].toUpperCase()
+    }
+    ports.set(key, { name, index })
   })
   const entries = []
   const seen = new Set()
@@ -1270,8 +1279,9 @@ function parseComPairEntries(output) {
     entries.push({
       cncA: key,
       cncB: partner,
-      a: ports.get(key),
-      b: ports.get(partner)
+      a: ports.get(key).name,
+      b: ports.get(partner).name,
+      index: ports.get(key).index
     })
   }
   return entries
@@ -1302,7 +1312,7 @@ async function removeCom0comPair(setupc, a, b) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const removed = await execFileAsync(
       setupc,
-      ['remove', entry.cncA, entry.cncB],
+      ['remove', String(entry.index)],
       { cwd }
     )
     if (!removed.error) {
@@ -1372,16 +1382,22 @@ try {
   Set-Location -LiteralPath (Split-Path -Parent $Setupc)
   $listOutput = (& $Setupc list 2>&1 | Out-String)
   $ports = @{}
+  $indexes = @{}
   foreach ($line in ($listOutput -split "\\r?\\n")) {
-    if ($line -match '(CNC[AB]\\d+)') {
+    if ($line -match '(CNC[AB](\\d+))') {
       $key = $matches[1].ToUpper()
-      if ($line -match 'PortName=(COM#|COM\\d+)') {
+      $idx = [int]$matches[2]
+      $indexes[$key] = $idx
+      if ($line -match 'RealPortName=(COM\\d+)') {
+        $ports[$key] = $matches[1].ToUpper()
+      } elseif ($line -match 'PortName=(COM#|COM\\d+)') {
         $ports[$key] = $matches[1].ToUpper()
       } else {
         $ports[$key] = 'COM#'
       }
     }
   }
+
   $usedSet = @{}
   foreach ($u in ($Used -split ',')) {
     if ($u) { $usedSet[$u] = $true }
@@ -1395,6 +1411,7 @@ try {
         $b = $ports[$partner]
         if (
           -not $usedSet.ContainsKey("$a|$b") -and
+          $a -ne $b -and
           $a -match '^COM\\d+$' -and
           $b -match '^COM\\d+$'
         ) {
@@ -1407,14 +1424,20 @@ try {
     Write-Result ('PAIRS=' + ($free -join ';'))
     exit 0
   }
-  # 清理上次失败留下的未命名端口对（两端都是 COM#），避免越积越多
+
+  # 没有被命名/使用的端口对直接移除，避免越积越多
   foreach ($key in @($ports.Keys)) {
     if ($key -like 'CNCA*') {
       $partner = $key -replace '^CNCA', 'CNCB'
-      if ($ports.ContainsKey($partner) -and $ports[$key] -eq 'COM#' -and $ports[$partner] -eq 'COM#') {
-        & $Setupc remove $key $partner 2>&1 | Out-Null
+      if (
+        $ports.ContainsKey($partner) -and
+        ($ports[$key] -eq 'COM#' -or $ports[$key] -eq $ports[$partner])
+      ) {
+        & $Setupc remove $indexes[$key] 2>&1 | Out-Null
         $ports.Remove($key)
         $ports.Remove($partner)
+        $indexes.Remove($key)
+        $indexes.Remove($partner)
       }
     }
   }
@@ -1437,45 +1460,53 @@ try {
     $bit = ($n - 1) % 8
     return ((($comDb[$idx] -shr $bit) -band 1) -eq 1)
   }
-  function Find-FreePair {
+  function Get-FreePair {
     for ($n = 20; $n -le 240; $n++) {
       if (-not (Test-ComUsed $n) -and -not (Test-ComUsed ($n + 1))) {
-        return @($n, $n + 1)
+        return "$n,$($n + 1)"
       }
     }
-    return @(0, 0)
+    return ''
   }
+
   $beforeKeys = @{}
   foreach ($key in @($ports.Keys)) { $beforeKeys[$key] = $true }
 
   for ($i = 0; $i -lt 6; $i++) {
-    $freeNames = Find-FreePair
-    if ($freeNames[0] -eq 0) {
+    $pairText = Get-FreePair
+    if (-not $pairText) {
       Write-Result 'ERROR=没有可用的 COM 端口号，请手动在 com0com 中创建端口对'
       exit 0
     }
-    $a = "COM$($freeNames[0])"
-    $b = "COM$($freeNames[1])"
+    $pairParts = $pairText -split ','
+    $a = "COM$($pairParts[0])"
+    $b = "COM$($pairParts[1])"
     $usedCom[$a] = $true
     $usedCom[$b] = $true
 
-    # 先用默认名字建对，再分别改名，避免 install 把同一个 PortName 套到两端
+    # 先用默认名字建对，再分别改 RealPortName，避免 install 把同一个名字套到两端
     $installOutput = (& $Setupc install - - 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) {
       Write-Result ('ERROR=' + (($installOutput -replace '\\r?\\n', ' ').Trim()))
       exit 0
     }
 
-    # 等驱动把新端口对注册出来，再通过前后差异定位新对（不依赖 install 的输出格式）
-    $newPair = $null
-    for ($wait = 0; $wait -lt 8 -and -not $newPair; $wait++) {
+    $newKey = $null
+    $newPartner = $null
+    $newIndex = -1
+    for ($wait = 0; $wait -lt 8 -and -not $newKey; $wait++) {
       Start-Sleep -Milliseconds 300
       $listAfter = (& $Setupc list 2>&1 | Out-String)
       $afterPorts = @{}
+      $afterIndexes = @{}
       foreach ($line in ($listAfter -split "\\r?\\n")) {
-        if ($line -match '(CNC[AB]\\d+)') {
+        if ($line -match '(CNC[AB](\\d+))') {
           $key = $matches[1].ToUpper()
-          if ($line -match 'PortName=(COM#|COM\\d+)') {
+          $idx = [int]$matches[2]
+          $afterIndexes[$key] = $idx
+          if ($line -match 'RealPortName=(COM\\d+)') {
+            $afterPorts[$key] = $matches[1].ToUpper()
+          } elseif ($line -match 'PortName=(COM#|COM\\d+)') {
             $afterPorts[$key] = $matches[1].ToUpper()
           } else {
             $afterPorts[$key] = 'COM#'
@@ -1486,30 +1517,30 @@ try {
         if ($key -like 'CNCA*' -and -not $beforeKeys.ContainsKey($key)) {
           $partner = $key -replace '^CNCA', 'CNCB'
           if ($afterPorts.ContainsKey($partner)) {
-            $newPair = @($key, $partner)
+            $newKey = $key
+            $newPartner = $partner
+            $newIndex = $afterIndexes[$key]
             break
           }
         }
       }
     }
 
-    if (-not $newPair) {
-      Write-Result 'ERROR=端口对已创建但未能读取端口名，请点「清理全部 com0com 端口」后重试'
+    if (-not $newKey) {
+      Write-Result 'ERROR=端口对已创建但未能读取端口名，请点「清空全部虚拟串口」后重试'
       exit 0
     }
 
-    $cncA = $newPair[0]
-    $cncB = $newPair[1]
-    $changeA = (& $Setupc change $cncA "PortName=$a" 2>&1 | Out-String)
+    $changeA = (& $Setupc change $newKey "RealPortName=$a" 2>&1 | Out-String)
     $okA = $LASTEXITCODE -eq 0
-    $changeB = (& $Setupc change $cncB "PortName=$b" 2>&1 | Out-String)
+    $changeB = (& $Setupc change $newPartner "RealPortName=$b" 2>&1 | Out-String)
     $okB = $LASTEXITCODE -eq 0
     if ($okA -and $okB) {
       Write-Result "PAIRS=$a,$b"
       exit 0
     }
 
-    & $Setupc remove $cncA $cncB 2>&1 | Out-Null
+    & $Setupc remove $newIndex 2>&1 | Out-Null
     $changeOutput = ($changeA + $changeB)
     if ($changeOutput -match 'already|exist|in use|占用|已存在') {
       continue
@@ -1957,7 +1988,7 @@ ipcMain.handle('virtual:clean-com0com', async () => {
   for (const entry of entries) {
     const result = await execFileAsync(
       setupc,
-      ['remove', entry.cncA, entry.cncB],
+      ['remove', String(entry.index)],
       { cwd }
     )
     if (!result.error) removed += 1
