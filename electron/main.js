@@ -1202,11 +1202,16 @@ function parseComPairs(output) {
   return pairs
 }
 
-function execFileAsync(file, args) {
+function execFileAsync(file, args, options = {}) {
   return new Promise((resolve) => {
-    execFile(file, args, { windowsHide: true }, (error, stdout, stderr) => {
-      resolve({ error, stdout: stdout || '', stderr: stderr || '' })
-    })
+    execFile(
+      file,
+      args,
+      { windowsHide: true, ...options },
+      (error, stdout, stderr) => {
+        resolve({ error, stdout: stdout || '', stderr: stderr || '' })
+      }
+    )
   })
 }
 
@@ -1220,8 +1225,10 @@ function com0comErrorDetail(result) {
 function installCom0comPairElevated(setupc, nameA, nameB) {
   return new Promise((resolve) => {
     const file = String(setupc).replace(/'/g, "''")
+    const workDir = String(path.dirname(setupc)).replace(/'/g, "''")
     const command = [
       `$p = Start-Process -FilePath '${file}'`,
+      `-WorkingDirectory '${workDir}'`,
       `-ArgumentList @('install','PortName=${nameA}','PortName=${nameB}')`,
       '-Verb RunAs -PassThru -Wait;',
       'exit $p.ExitCode'
@@ -1274,11 +1281,11 @@ async function ensureCom0comPair(setupc, listOutput) {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const nameA = `COM${maxPort + 2}`
     const nameB = `COM${maxPort + 3}`
-    const result = await execFileAsync(setupc, [
-      'install',
-      `PortName=${nameA}`,
-      `PortName=${nameB}`
-    ])
+    const result = await execFileAsync(
+      setupc,
+      ['install', `PortName=${nameA}`, `PortName=${nameB}`],
+      { cwd: path.dirname(setupc) }
+    )
     if (!result.error) return { pair: { a: nameA, b: nameB } }
 
     const detail = com0comErrorDetail(result)
@@ -1313,7 +1320,7 @@ async function createWindowsVirtualPort({ portId, ownerId, rules }) {
   }
 
   return withCom0comQueue(async () => {
-    const listed = await execFileAsync(setupc, ['list'])
+    const listed = await execFileAsync(setupc, ['list'], { cwd: path.dirname(setupc) })
     // list 在没有端口对时可能返回非零退出码；即使读取失败也继续尝试创建
     const listDetail = com0comErrorDetail(listed)
     const ensured = await ensureCom0comPair(setupc, listed.stdout)
