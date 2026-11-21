@@ -89,7 +89,29 @@ export default function VirtualPortPage({
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const [uninstallBusy, setUninstallBusy] = useState(false);
   const [uninstallResult, setUninstallResult] = useState('');
+  const [isAdmin, setIsAdmin] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [clearBusy, setClearBusy] = useState(false);
+  const [clearError, setClearError] = useState('');
   const platform = window.terminalAPI?.platform || '';
+  const adminBlocked = platform === 'win32' && isAdmin !== true;
+  const adminRequired = platform === 'win32' && isAdmin === false;
+
+  useEffect(() => {
+    if (platform !== 'win32') return;
+    let cancelled = false;
+    window.terminalAPI?.isAdmin?.()
+      ?.then((result) => {
+        if (!cancelled) setIsAdmin(Boolean(result?.admin));
+      })
+      ?.catch?.(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [platform]);
   const logRef = useRef(null);
   const followRef = useRef(true);
   const copyTimerRef = useRef(null);
@@ -174,11 +196,13 @@ export default function VirtualPortPage({
   // 页面激活后，把还没创建过的端口建出来
   useEffect(() => {
     if (!active) return;
+    // Windows 需要先确认管理员权限，避免未提权时刷出一堆失败卡片
+    if (platform === 'win32' && isAdmin !== true) return;
     ports.forEach((port) => {
       if (runtime[port.id]) return;
       createPort(port);
     });
-  }, [active, ports, runtime, createPort]);
+  }, [active, ports, runtime, createPort, platform, isAdmin]);
 
   // 规则改动同步到主进程
   useEffect(() => {
@@ -343,8 +367,20 @@ export default function VirtualPortPage({
     followRef.current = true;
   };
 
-  const removePort = (portId) => {
-    window.terminalAPI?.virtual?.close(portId);
+  const removePort = async (portId) => {
+    setDeleteError('');
+    setDeleteBusy(true);
+    const result = await window.terminalAPI?.virtual
+      ?.remove?.(portId)
+      ?.catch?.((error) => ({
+        ok: false,
+        error: error?.message || String(error)
+      }));
+    setDeleteBusy(false);
+    if (!result?.ok) {
+      setDeleteError(result?.error || '删除虚拟串口失败');
+      return;
+    }
     const nextPorts = ports.filter((port) => port.id !== portId);
     setPorts(nextPorts);
     setRuntime((prev) => {
@@ -366,12 +402,53 @@ export default function VirtualPortPage({
     if (activePortId === portId) {
       setActivePortId(nextPorts[0]?.id || '');
     }
+    setDeleteTarget('');
   };
 
-  const clearAllPorts = () => {
-    portsRef.current.forEach((port) => {
-      window.terminalAPI?.virtual?.close(port.id);
-    });
+  const clearAllPorts = async () => {
+    setClearError('');
+    setClearBusy(true);
+    const failed = [];
+    for (const port of portsRef.current) {
+      const result = await window.terminalAPI?.virtual
+        ?.remove?.(port.id)
+        ?.catch?.((error) => ({
+          ok: false,
+          error: error?.message || String(error)
+        }));
+      if (!result?.ok) failed.push({ port, error: result?.error || '删除失败' });
+    }
+    setClearBusy(false);
+    const failedIds = new Set(failed.map((item) => item.port.id));
+    if (failed.length) {
+      setPorts((prev) => prev.filter((port) => failedIds.has(port.id)));
+      setRuntime((prev) => {
+        const next = {};
+        failed.forEach(({ port }) => {
+          if (prev[port.id]) next[port.id] = prev[port.id];
+        });
+        return next;
+      });
+      setLogs((prev) => {
+        const next = {};
+        failed.forEach(({ port }) => {
+          if (prev[port.id]) next[port.id] = prev[port.id];
+        });
+        return next;
+      });
+      setLastRxAt((prev) => {
+        const next = {};
+        failed.forEach(({ port }) => {
+          if (prev[port.id]) next[port.id] = prev[port.id];
+        });
+        return next;
+      });
+      setActivePortId(failed[0].port.id);
+      setClearError(
+        `${failed.length} 个端口未删除：${failed[0].error}`
+      );
+      return;
+    }
     setPorts([]);
     setRuntime({});
     setLogs({});
@@ -515,6 +592,16 @@ export default function VirtualPortPage({
               <span className="virtual-count">{ports.length}</span>
             </div>
 
+            {adminRequired ? (
+              <div className="virtual-admin-warning" role="alert">
+                <Icon name="alert" size={14} />
+                <span>
+                  创建或删除虚拟串口需要管理员权限。请关闭应用，右键 Weft Terminal
+                  →「以管理员身份运行」。
+                </span>
+              </div>
+            ) : null}
+
             <div className="virtual-port-list">
               {ports.map((port) => {
                 const rt = runtime[port.id] || {};
@@ -623,6 +710,12 @@ export default function VirtualPortPage({
                             <button
                               type="button"
                               className="virtual-port-btn is-wide"
+                              disabled={adminBlocked}
+                              title={
+                                adminRequired
+                                  ? '请以管理员身份重新打开应用后再安装 com0com'
+                                  : undefined
+                              }
                               onClick={() => {
                                 window.terminalAPI?.virtual
                                   ?.installCom0com?.()
@@ -636,6 +729,7 @@ export default function VirtualPortPage({
                           <button
                             type="button"
                             className="virtual-port-btn"
+                            disabled={adminBlocked}
                             onClick={() => createPort(port)}
                           >
                             <Icon name="refresh" size={13} />
@@ -665,7 +759,10 @@ export default function VirtualPortPage({
                       <button
                         type="button"
                         className="virtual-port-btn is-danger"
-                        onClick={() => setDeleteTarget(port.id)}
+                        onClick={() => {
+                          setDeleteError('');
+                          setDeleteTarget(port.id);
+                        }}
                       >
                         <Icon name="trash" size={13} />
                         删除
@@ -681,6 +778,12 @@ export default function VirtualPortPage({
               type="button"
               className="virtual-add-port"
               onClick={addPort}
+              disabled={adminBlocked}
+              title={
+                adminRequired
+                  ? '请以管理员身份重新打开应用后再新建虚拟串口'
+                  : undefined
+              }
             >
               <Icon name="plus" size={13} />
               新建虚拟串口
@@ -689,8 +792,16 @@ export default function VirtualPortPage({
             <button
               type="button"
               className="virtual-clear-all"
-              onClick={() => setClearAllOpen(true)}
-              disabled={!ports.length}
+              onClick={() => {
+                setClearError('');
+                setClearAllOpen(true);
+              }}
+              disabled={!ports.length || adminBlocked}
+              title={
+                adminRequired
+                  ? '请以管理员身份重新打开应用后再删除 com0com 端口对'
+                  : undefined
+              }
             >
               <Icon name="trash" size={13} />
               清空全部虚拟串口
@@ -700,6 +811,12 @@ export default function VirtualPortPage({
               <button
                 type="button"
                 className="virtual-uninstall-com0com"
+                disabled={adminBlocked}
+                title={
+                  adminRequired
+                    ? '请以管理员身份重新打开应用后再卸载 com0com'
+                    : undefined
+                }
                 onClick={() => {
                   setUninstallResult('');
                   setUninstallOpen(true);
@@ -1052,9 +1169,10 @@ export default function VirtualPortPage({
               <button
                 type="button"
                 className="danger-btn"
+                disabled={clearBusy || adminBlocked}
                 onClick={clearAllPorts}
               >
-                清空
+                {clearBusy ? '正在清空…' : '清空'}
               </button>
             </>
           }
@@ -1064,8 +1182,16 @@ export default function VirtualPortPage({
           </p>
           {platform === 'win32' ? (
             <p className="virtual-confirm-note">
-              com0com 已创建的端口对不会被自动删除，之后新建虚拟串口时会优先复用。
+              会同时从 com0com 删除这些虚拟串口对应的 COM 端口对。
             </p>
+          ) : null}
+          {adminRequired ? (
+            <p className="virtual-confirm-note is-danger">
+              需要管理员权限。请关闭应用，右键 Weft Terminal →「以管理员身份运行」后再清空。
+            </p>
+          ) : null}
+          {clearError ? (
+            <p className="virtual-confirm-note is-danger">{clearError}</p>
           ) : null}
         </Modal>
       ) : null}
@@ -1089,12 +1215,10 @@ export default function VirtualPortPage({
               <button
                 type="button"
                 className="danger-btn"
-                onClick={() => {
-                  removePort(deletePort.id);
-                  setDeleteTarget('');
-                }}
+                disabled={deleteBusy || adminBlocked}
+                onClick={() => removePort(deletePort.id)}
               >
-                删除
+                {deleteBusy ? '正在删除…' : '删除'}
               </button>
             </>
           }
@@ -1102,6 +1226,19 @@ export default function VirtualPortPage({
           <p className="virtual-confirm-text">
             将关闭 <code>{deletePath}</code>，并删除它的自动回复规则。
           </p>
+          {platform === 'win32' ? (
+            <p className="virtual-confirm-note">
+              同时会从 com0com 删除这对 COM 端口，其他程序将无法再打开它们。
+            </p>
+          ) : null}
+          {adminRequired ? (
+            <p className="virtual-confirm-note is-danger">
+              需要管理员权限。请关闭应用，右键 Weft Terminal →「以管理员身份运行」后再删除。
+            </p>
+          ) : null}
+          {deleteError ? (
+            <p className="virtual-confirm-note is-danger">{deleteError}</p>
+          ) : null}
         </Modal>
       ) : null}
     </div>

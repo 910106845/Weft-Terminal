@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('serialAPI', {
 
 contextBridge.exposeInMainWorld('terminalAPI', {
   platform: process.platform,
+  isAdmin: () => ipcRenderer.invoke('app:is-admin'),
   shells: () => ipcRenderer.invoke('terminal:shells'),
   create: (terminalId, options = {}) =>
     ipcRenderer.invoke('terminal:create', { ...options, terminalId }),
@@ -46,6 +47,7 @@ contextBridge.exposeInMainWorld('terminalAPI', {
   virtual: {
     create: (payload) => ipcRenderer.invoke('virtual:create', payload),
     close: (portId) => ipcRenderer.invoke('virtual:close', { portId }),
+    remove: (portId) => ipcRenderer.invoke('virtual:remove', { portId }),
     installCom0com: () => ipcRenderer.invoke('virtual:install-com0com'),
     uninstallCom0com: () => ipcRenderer.invoke('virtual:uninstall-com0com'),
     setRules: (portId, rules) =>

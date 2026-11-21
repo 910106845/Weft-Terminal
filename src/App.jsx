@@ -358,7 +358,6 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState(initialSession.activeId)
   const [openedTabIds, setOpenedTabIds] = useState([])
   const [closeAllOpen, setCloseAllOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [tabListOpen, setTabListOpen] = useState(false)
   const [addMenuAlign, setAddMenuAlign] = useState('left')
@@ -375,7 +374,6 @@ export default function App() {
   const [sshDialog, setSshDialog] = useState(null)
   const [tabMenu, setTabMenu] = useState(null)
   const [appToast, setAppToast] = useState(null)
-  const menuWrapRef = useRef(null)
   const tabCardsRef = useRef(null)
   const appToastTimerRef = useRef(null)
   const addMenuWrapRef = useRef(null)
@@ -509,22 +507,6 @@ export default function App() {
     }
   }, [activeTabId])
 
-  useEffect(() => {
-    if (!menuOpen) return undefined
-    const onPointerDown = (event) => {
-      if (!menuWrapRef.current?.contains(event.target)) setMenuOpen(false)
-    }
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [menuOpen])
-
   const updateAddMenuAlignment = useCallback(() => {
     const rect = addMenuWrapRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -540,7 +522,6 @@ export default function App() {
       if (!prev) updateAddMenuAlignment()
       return !prev
     })
-    setMenuOpen(false)
   }, [updateAddMenuAlignment])
 
   useEffect(() => {
@@ -1029,26 +1010,8 @@ export default function App() {
 
   const openNewWindow = useCallback(() => {
     window.serialAPI?.newWindow?.()
-    setMenuOpen(false)
   }, [])
 
-  const handleUninstall = useCallback(async () => {
-    setMenuOpen(false)
-    if (!window.serialAPI?.uninstall) return
-    if (
-      !window.confirm(
-        '确定卸载 Weft Terminal 吗？\n\n本地缓存、串口配置和指令收藏都会保留。'
-      )
-    ) {
-      return
-    }
-    const result = await window.serialAPI.uninstall()
-    if (!result || !result.ok) {
-      window.alert((result && result.error) || '卸载失败')
-    }
-  }, [])
-
-  const platform = window.serialAPI?.platform || ''
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || null
   const connectedTabCount = tabs.filter((tab) => tab.connected).length
   const menuTab = tabMenu
@@ -1356,40 +1319,6 @@ export default function App() {
         </div>
 
         <div className="tab-strip-actions">
-          {platform === 'win32' ? (
-            <div className="app-menu-wrap" ref={menuWrapRef}>
-              <button
-                type="button"
-                className={`tab-action ${menuOpen ? 'is-active' : ''}`}
-                onClick={() => {
-                  setMenuOpen((prev) => !prev)
-                  setAddMenuOpen(false)
-                }}
-                title="更多"
-              >
-                <Icon name="more" size={15} />
-              </button>
-              {menuOpen ? (
-                <div className="app-menu">
-                  <button type="button" onClick={openNewWindow}>
-                    <Icon name="window-plus" size={13} />
-                    新建窗口
-                  </button>
-                  <button
-                    type="button"
-                    className="is-danger"
-                    onClick={handleUninstall}
-                  >
-                    <Icon name="trash" size={13} />
-                    卸载应用
-                  </button>
-                  <div className="app-menu-note">
-                    卸载不会删除本地配置和指令收藏
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
           <button
             type="button"
             className="tab-action is-icon tab-theme-toggle"

@@ -1092,11 +1092,18 @@ function handleVirtualIncoming(portId, chunk) {
   scheduleVirtualFlush(portId)
 }
 
-function closeVirtual(portId) {
+function closeVirtual(portId, options = {}) {
+  const { releasePair = true } = options
   const state = virtualPorts.get(portId)
   if (!state) return
   virtualPorts.delete(portId)
-  if (state.kind === 'com' && state.internalPath && state.externalPath) {
+  if (
+    releasePair &&
+    state.pairKey &&
+    state.kind === 'com' &&
+    state.internalPath &&
+    state.externalPath
+  ) {
     addPairToPool({ a: state.internalPath, b: state.externalPath })
   }
   if (state.flushTimer) {
@@ -1210,23 +1217,59 @@ function com0comInstallerPath() {
   return ''
 }
 
-function parseComPairs(output) {
+function parseComPairEntries(output) {
   const ports = new Map()
   output.split(/\r?\n/).forEach((line) => {
     const match = /^(CNC[AB]\d+)\s+PortName=(COM\d+)/i.exec(line.trim())
     if (match) ports.set(match[1].toUpperCase(), match[2].toUpperCase())
   })
-  const pairs = []
+  const entries = []
   const seen = new Set()
   for (const key of ports.keys()) {
-    if (seen.has(key)) continue
+    if (seen.has(key) || !key.startsWith('CNCA')) continue
     const partner = key.replace('CNCA', 'CNCB')
     if (!ports.has(partner)) continue
     seen.add(key)
     seen.add(partner)
-    pairs.push({ a: ports.get(key), b: ports.get(partner) })
+    entries.push({
+      cncA: key,
+      cncB: partner,
+      a: ports.get(key),
+      b: ports.get(partner)
+    })
   }
-  return pairs
+  return entries
+}
+
+function removePairFromPool(a, b) {
+  const key = `${a}|${b}`
+  for (let index = windowsPairPool.length - 1; index >= 0; index -= 1) {
+    if (pairKey(windowsPairPool[index]) === key) {
+      windowsPairPool.splice(index, 1)
+    }
+  }
+}
+
+async function removeCom0comPair(setupc, a, b) {
+  const cwd = path.dirname(setupc)
+  const listed = await execFileAsync(setupc, ['list'], { cwd })
+  if (listed.error) {
+    return { ok: false, error: com0comErrorDetail(listed) }
+  }
+  const entries = parseComPairEntries(listed.stdout)
+  const entry = entries.find(
+    (item) => (item.a === a && item.b === b) || (item.a === b && item.b === a)
+  )
+  if (!entry) return { ok: true }
+  const removed = await execFileAsync(
+    setupc,
+    ['remove', entry.cncA, entry.cncB],
+    { cwd }
+  )
+  if (removed.error) {
+    return { ok: false, error: com0comErrorDetail(removed) }
+  }
+  return { ok: true }
 }
 
 function execFileAsync(file, args, options = {}) {
@@ -1240,6 +1283,20 @@ function execFileAsync(file, args, options = {}) {
       }
     )
   })
+}
+
+let windowsAdminCache = null
+
+async function isWindowsAdmin() {
+  if (process.platform !== 'win32') return false
+  if (windowsAdminCache !== null) return windowsAdminCache
+  const result = await execFileAsync('powershell.exe', [
+    '-NoProfile',
+    '-Command',
+    "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"
+  ])
+  windowsAdminCache = !result.error && /true/i.test(result.stdout)
+  return windowsAdminCache
 }
 
 function com0comErrorDetail(result) {
@@ -1318,24 +1375,21 @@ try {
 `
 }
 
-async function createCom0comPairElevated(setupc, usedKeys) {
+async function runCom0comPairScript(setupc, usedKeys) {
   const outputPath = path.join(
     app.getPath('temp'),
     `weft-com0com-${process.pid}-${Date.now()}.out`
   )
   const script = com0comPairScript(setupc, usedKeys.join(','), outputPath)
   const encoded = Buffer.from(script, 'utf16le').toString('base64')
-  const command = [
-    `$p = Start-Process -FilePath 'powershell.exe'`,
-    `-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','${encoded}')`,
-    '-Verb RunAs -PassThru -Wait;',
-    'exit $p.ExitCode'
-  ].join(' ')
 
+  // 应用必须以管理员身份运行；这里不再触发 UAC，直接继承管理员权限执行
   const launched = await execFileAsync('powershell.exe', [
     '-NoProfile',
-    '-Command',
-    command
+    '-ExecutionPolicy',
+    'Bypass',
+    '-EncodedCommand',
+    encoded
   ])
   let output = ''
   try {
@@ -1373,14 +1427,8 @@ async function createCom0comPairElevated(setupc, usedKeys) {
   }
 }
 
-async function uninstallCom0comElevated(setupc) {
-  const command = [
-    `$p = Start-Process -FilePath ${quotePowerShell(setupc)}`,
-    `-WorkingDirectory ${quotePowerShell(path.dirname(setupc))}`,
-    `-ArgumentList 'uninstall' -Verb RunAs -PassThru -Wait;`,
-    'exit $p.ExitCode'
-  ].join(' ')
-  return execFileAsync('powershell.exe', ['-NoProfile', '-Command', command])
+async function uninstallCom0com(setupc) {
+  return execFileAsync(setupc, ['uninstall'], { cwd: path.dirname(setupc) })
 }
 
 function usedComPairKeys() {
@@ -1429,6 +1477,15 @@ async function openWindowsComPort(path) {
 }
 
 async function createWindowsVirtualPort({ portId, ownerId, rules }) {
+  if (!(await isWindowsAdmin())) {
+    return {
+      ok: false,
+      error: '需要管理员权限',
+      hint:
+        'Windows 创建虚拟串口需要管理员权限。请关闭应用，右键 Weft Terminal →「以管理员身份运行」，然后重试。',
+      needsAdmin: true
+    }
+  }
   const setupc = com0comSetupPath()
   if (!setupc) {
     return {
@@ -1454,7 +1511,7 @@ async function createWindowsVirtualPort({ portId, ownerId, rules }) {
           ...usedComPairKeys(),
           ...windowsPairPool.map((item) => pairKey(item))
         ])
-        const result = await createCom0comPairElevated(setupc, [...used])
+        const result = await runCom0comPairScript(setupc, [...used])
         if (result.pairs?.length) {
           result.pairs.forEach(addPairToPool)
           continue
@@ -1490,11 +1547,16 @@ async function createWindowsVirtualPort({ portId, ownerId, rules }) {
       virtualPorts.set(portId, state)
       port.on('data', (buffer) => handleVirtualIncoming(portId, buffer))
       port.on('close', () => {
-        if (virtualPorts.get(portId) === state) {
-          virtualPorts.delete(portId)
-          addPairToPool({ a: state.internalPath, b: state.externalPath })
+        if (virtualPorts.get(portId) !== state) return
+        if (state.keepOnClose) {
           emitVirtual(ownerId, portId, { type: 'status', status: 'closed' })
+          return
         }
+        virtualPorts.delete(portId)
+        if (state.pairKey) {
+          addPairToPool({ a: state.internalPath, b: state.externalPath })
+        }
+        emitVirtual(ownerId, portId, { type: 'status', status: 'closed' })
       })
       port.on('error', () => {})
       return {
@@ -1530,6 +1592,14 @@ ipcMain.handle('virtual:install-com0com', async () => {
   if (process.platform !== 'win32') {
     return { ok: false, error: '只有 Windows 需要 com0com' }
   }
+  if (!(await isWindowsAdmin())) {
+    return {
+      ok: false,
+      error: '需要管理员权限',
+      hint: '请以管理员身份重新打开 Weft Terminal 后再安装 com0com',
+      needsAdmin: true
+    }
+  }
   const installer = com0comInstallerPath()
   if (!installer) {
     return { ok: false, error: '未找到随应用附带的 com0com 安装程序' }
@@ -1543,13 +1613,21 @@ ipcMain.handle('virtual:uninstall-com0com', async () => {
   if (process.platform !== 'win32') {
     return { ok: false, error: '只有 Windows 使用 com0com' }
   }
+  if (!(await isWindowsAdmin())) {
+    return {
+      ok: false,
+      error: '需要管理员权限',
+      hint: '请以管理员身份重新打开 Weft Terminal 后再卸载 com0com',
+      needsAdmin: true
+    }
+  }
   const setupc = com0comSetupPath()
   if (!setupc) {
     return { ok: false, error: '未检测到 com0com' }
   }
   for (const portId of [...virtualPorts.keys()]) closeVirtual(portId)
   windowsPairPool.length = 0
-  const result = await uninstallCom0comElevated(setupc)
+  const result = await uninstallCom0com(setupc)
   if (result.error) {
     return {
       ok: false,
@@ -1557,6 +1635,53 @@ ipcMain.handle('virtual:uninstall-com0com', async () => {
     }
   }
   return { ok: true, reboot: true }
+})
+
+ipcMain.handle('app:is-admin', async () => ({
+  admin: await isWindowsAdmin()
+}))
+
+ipcMain.handle('virtual:remove', async (_event, payload = {}) => {
+  const portId = payload.portId
+  const state = virtualPorts.get(portId)
+  if (!state) return { ok: true }
+  const a = state.internalPath
+  const b = state.externalPath
+
+  if (process.platform === 'win32' && a && b) {
+    if (!(await isWindowsAdmin())) {
+      return {
+        ok: false,
+        needsAdmin: true,
+        error: '需要管理员权限才能同步删除 com0com 端口对',
+        hint: '请以管理员身份重新打开 Weft Terminal 后再删除'
+      }
+    }
+    const setupc = com0comSetupPath()
+    if (!setupc) return { ok: false, error: '未检测到 com0com' }
+
+    // 先关掉本应用占用的那一端，但保留状态以便删除失败时可以重试
+    state.pairKey = ''
+    state.keepOnClose = true
+    if (state.flushTimer) {
+      clearTimeout(state.flushTimer)
+      state.flushTimer = null
+    }
+    try {
+      if (state.port?.isOpen) state.port.close(() => {})
+    } catch {
+      // 端口已经关闭时忽略
+    }
+    await new Promise((resolve) => setTimeout(resolve, 160))
+    removePairFromPool(a, b)
+    const result = await removeCom0comPair(setupc, a, b)
+    if (!result.ok) return result
+    virtualPorts.delete(portId)
+    return { ok: true, pairRemoved: true }
+  }
+
+  closeVirtual(portId)
+  return { ok: true }
 })
 
 ipcMain.handle('virtual:close', async (_event, payload = {}) => {
