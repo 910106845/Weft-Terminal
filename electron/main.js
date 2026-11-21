@@ -1220,7 +1220,7 @@ function com0comInstallerPath() {
 function parseComPairEntries(output) {
   const ports = new Map()
   output.split(/\r?\n/).forEach((line) => {
-    const match = /(CNC[AB]\d+)\s+PortName=(COM\d+)/i.exec(line.trim())
+    const match = /(CNC[AB]\d+)\s+PortName=(COM#|COM\d+)/i.exec(line.trim())
     if (match) ports.set(match[1].toUpperCase(), match[2].toUpperCase())
   })
   const entries = []
@@ -1347,7 +1347,11 @@ try {
       if ($ports.ContainsKey($partner)) {
         $a = $ports[$key]
         $b = $ports[$partner]
-        if (-not $usedSet.ContainsKey("$a|$b")) {
+        if (
+          -not $usedSet.ContainsKey("$a|$b") -and
+          $a -match '^COM\d+$' -and
+          $b -match '^COM\d+$'
+        ) {
           $free += "$a,$b"
         }
       }
@@ -1521,6 +1525,28 @@ async function runCom0comPairScript(setupc, usedKeys) {
   }
 }
 
+function com0comUninstallerPath() {
+  const dirs = [
+    com0comDir(),
+    process.env.ProgramFiles
+      ? path.join(process.env.ProgramFiles, 'com0com')
+      : '',
+    process.env['ProgramFiles(x86)']
+      ? path.join(process.env['ProgramFiles(x86)'], 'com0com')
+      : '',
+    'C:\\Program Files (x86)\\com0com',
+    'C:\\Program Files\\com0com'
+  ].filter(Boolean)
+  const names = ['uninstall.exe', 'unins000.exe', 'uninst.exe']
+  for (const dir of dirs) {
+    for (const name of names) {
+      const file = path.join(dir, name)
+      if (fsSync.existsSync(file)) return file
+    }
+  }
+  return ''
+}
+
 async function findCom0comUninstallCommand() {
   const script = [
     "$roots = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall')",
@@ -1548,6 +1574,23 @@ async function findCom0comUninstallCommand() {
 }
 
 async function uninstallCom0com(setupc) {
+  const uninstaller = com0comUninstallerPath()
+  if (uninstaller) {
+    const cwd = path.dirname(uninstaller)
+    let result = await execFileAsync(uninstaller, ['/S'], { cwd })
+    if (result.error) {
+      // 某些卸载程序不支持 /S，回退到可见的图形界面
+      result = await execFileAsync(uninstaller, [], { cwd })
+    }
+    if (!result.error || result.error.code === 3010) {
+      // NSIS 卸载程序有时会先退出再在后台删除文件，稍等并检查
+      for (let i = 0; i < 12; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        if (!com0comSetupPath() && !fsSync.existsSync(uninstaller)) break
+      }
+      return { ...result, official: true }
+    }
+  }
   const command = await findCom0comUninstallCommand()
   if (command) {
     const result = await execFileAsync('cmd.exe', ['/c', command], {
@@ -1763,7 +1806,7 @@ ipcMain.handle('virtual:uninstall-com0com', async () => {
   windowsPairPool.length = 0
   const result = await uninstallCom0com(setupc)
   windowsSerialPortCache.at = 0
-  if (result.error) {
+  if (result.error && result.error.code !== 3010) {
     return {
       ok: false,
       error: com0comErrorDetail(result) || '卸载 com0com 失败'
