@@ -1488,18 +1488,7 @@ try {
   foreach ($key in @($ports.Keys)) { $beforeKeys[$key] = $true }
 
   for ($i = 0; $i -lt 6; $i++) {
-    $pairText = Get-FreePair
-    if (-not $pairText) {
-      Write-Result ('ERROR=没有可用的 COM 端口号；busy=' + (($busyOutput -replace '\\r?\\n', ' ').Trim()))
-      exit 0
-    }
-    $pairParts = $pairText -split ','
-    $a = "COM$($pairParts[0])"
-    $b = "COM$($pairParts[1])"
-    $usedCom[$a] = $true
-    $usedCom[$b] = $true
-
-    # 先用默认名字建对，再分别改 RealPortName，避免 install 把同一个名字套到两端
+    # install - - 会由 Ports class 自动分配真实 COM 名，多数情况下不需要再改名
     $installOutput = (& $Setupc --silent install - - 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) {
       Write-Result ('ERROR=' + (($installOutput -replace '\\r?\\n', ' ').Trim()))
@@ -1545,6 +1534,28 @@ try {
       Write-Result 'ERROR=端口对已创建但未能读取端口名，请点「清空全部虚拟串口」后重试'
       exit 0
     }
+
+    $newA = $afterPorts[$newKey]
+    $newB = $afterPorts[$newPartner]
+    if (
+      $newA -match '^COM\\d+$' -and
+      $newB -match '^COM\\d+$' -and
+      $newA -ne $newB
+    ) {
+      Write-Result "PAIRS=$newA,$newB"
+      exit 0
+    }
+
+    $pairText = Get-FreePair
+    if (-not $pairText) {
+      Write-Result ('ERROR=没有可用的 COM 端口号；busy=' + (($busyOutput -replace '\\r?\\n', ' ').Trim()))
+      exit 0
+    }
+    $pairParts = $pairText -split ','
+    $a = "COM$($pairParts[0])"
+    $b = "COM$($pairParts[1])"
+    $usedCom[$a] = $true
+    $usedCom[$b] = $true
 
     $changeA = (& $Setupc --silent change $newKey "RealPortName=$a" 2>&1 | Out-String)
     $okA = $LASTEXITCODE -eq 0
