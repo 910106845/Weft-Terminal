@@ -1463,23 +1463,21 @@ try {
   foreach ($v in $ports.Values) {
     if ($v) { $usedCom[$v] = $true }
   }
-  $comDb = @()
-  try {
-    $comDb = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\COM Name Arbiter' -Name ComDB -ErrorAction Stop).ComDB
-  } catch {
-    $comDb = @()
-  }
-  function Test-ComUsed([int]$n) {
-    if ($usedCom.ContainsKey("COM$n")) { return $true }
-    if ($null -eq $comDb -or $n -lt 1) { return $false }
-    $idx = [math]::Floor(($n - 1) / 8)
-    if ($idx -ge $comDb.Length) { return $false }
-    $bit = ($n - 1) % 8
-    return ((($comDb[$idx] -shr $bit) -band 1) -eq 1)
+  $busyCom = @{}
+  $busyOutput = (& $Setupc --silent busynames "COM*" 2>&1 | Out-String)
+  foreach ($line in ($busyOutput -split "\\r?\\n")) {
+    foreach ($m in [regex]::Matches($line, 'COM(\\d+)')) {
+      $busyCom[[int]$m.Groups[1].Value] = $true
+    }
   }
   function Get-FreePair {
     for ($n = 20; $n -le 240; $n++) {
-      if (-not (Test-ComUsed $n) -and -not (Test-ComUsed ($n + 1))) {
+      if (
+        -not $busyCom.ContainsKey($n) -and
+        -not $busyCom.ContainsKey($n + 1) -and
+        -not $usedCom.ContainsKey("COM$n") -and
+        -not $usedCom.ContainsKey("COM$($n + 1)")
+      ) {
         return "$n,$($n + 1)"
       }
     }
@@ -1492,7 +1490,7 @@ try {
   for ($i = 0; $i -lt 6; $i++) {
     $pairText = Get-FreePair
     if (-not $pairText) {
-      Write-Result 'ERROR=没有可用的 COM 端口号，请手动在 com0com 中创建端口对'
+      Write-Result ('ERROR=没有可用的 COM 端口号；busy=' + (($busyOutput -replace '\\r?\\n', ' ').Trim()))
       exit 0
     }
     $pairParts = $pairText -split ','
