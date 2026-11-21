@@ -1220,7 +1220,7 @@ function com0comInstallerPath() {
 function parseComPairEntries(output) {
   const ports = new Map()
   output.split(/\r?\n/).forEach((line) => {
-    const match = /^(CNC[AB]\d+)\s+PortName=(COM\d+)/i.exec(line.trim())
+    const match = /(CNC[AB]\d+)\s+PortName=(COM\d+)/i.exec(line.trim())
     if (match) ports.set(match[1].toUpperCase(), match[2].toUpperCase())
   })
   const entries = []
@@ -1323,7 +1323,7 @@ try {
   $listOutput = (& $Setupc list 2>&1 | Out-String)
   $ports = @{}
   foreach ($line in ($listOutput -split "\\r?\\n")) {
-    if ($line -match '^(CNC[AB]\\d+)\\s+PortName=(COM\\d+)') {
+    if ($line -match '(CNC[AB]\\d+)\\s+PortName=(COM\\d+)') {
       $ports[$matches[1].ToUpper()] = $matches[2].ToUpper()
     }
   }
@@ -1348,24 +1348,51 @@ try {
     Write-Result ('PAIRS=' + ($free -join ';'))
     exit 0
   }
-  $max = 3
-  foreach ($m in [regex]::Matches($listOutput, 'COM(\\d+)')) {
-    $n = [int]$m.Groups[1].Value
-    if ($n -gt $max) { $max = $n }
+  $usedCom = @{}
+  foreach ($v in $ports.Values) {
+    if ($v) { $usedCom[$v] = $true }
   }
-  for ($i = 0; $i -lt 8; $i++) {
-    $a = "COM$($max + 2)"
-    $b = "COM$($max + 3)"
+  $comDb = @()
+  try {
+    $comDb = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\COM Name Arbiter' -Name ComDB -ErrorAction Stop).ComDB
+  } catch {
+    $comDb = @()
+  }
+  function Test-ComUsed([int]$n) {
+    if ($usedCom.ContainsKey("COM$n")) { return $true }
+    if ($null -eq $comDb -or $n -lt 1) { return $false }
+    $idx = [math]::Floor(($n - 1) / 8)
+    if ($idx -ge $comDb.Length) { return $false }
+    $bit = ($n - 1) % 8
+    return ((($comDb[$idx] -shr $bit) -band 1) -eq 1)
+  }
+  function Find-FreePair {
+    for ($n = 20; $n -le 240; $n++) {
+      if (-not (Test-ComUsed $n) -and -not (Test-ComUsed ($n + 1))) {
+        return @($n, $n + 1)
+      }
+    }
+    return @(0, 0)
+  }
+  for ($i = 0; $i -lt 6; $i++) {
+    $freeNames = Find-FreePair
+    if ($freeNames[0] -eq 0) {
+      Write-Result 'ERROR=没有可用的 COM 端口号，请手动在 com0com 中创建端口对'
+      exit 0
+    }
+    $a = "COM$($freeNames[0])"
+    $b = "COM$($freeNames[1])"
+    $usedCom[$a] = $true
+    $usedCom[$b] = $true
     $installOutput = (& $Setupc install "PortName=$a" "PortName=$b" 2>&1 | Out-String)
     if ($LASTEXITCODE -eq 0) {
       Write-Result "PAIRS=$a,$b"
       exit 0
     }
     if ($installOutput -match 'already|exist|in use|占用|已存在') {
-      $max += 2
       continue
     }
-    Write-Result ('ERROR=' + (($installOutput -replace '\\r?\\n', ' ').Trim()))
+    Write-Result ('ERROR=' + (($installOutput -replace '\r?\n', ' ').Trim()))
     exit 0
   }
   Write-Result 'ERROR=创建端口对失败：没有找到可用的 COM 端口名'
@@ -1427,7 +1454,46 @@ async function runCom0comPairScript(setupc, usedKeys) {
   }
 }
 
+async function findCom0comUninstallCommand() {
+  const script = [
+    "$roots = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall')",
+    'foreach ($root in $roots) {',
+    '  if (!(Test-Path $root)) { continue }',
+    '  Get-ChildItem $root | ForEach-Object {',
+    '    $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue',
+    "    if ($p -and $p.DisplayName -like '*com0com*') {",
+    '      if ($p.QuietUninstallString) { $p.QuietUninstallString; exit }',
+    '      if ($p.UninstallString) { $p.UninstallString; exit }',
+    '    }',
+    '  }',
+    '}'
+  ].join('\n')
+  const result = await execFileAsync('powershell.exe', [
+    '-NoProfile',
+    '-Command',
+    script
+  ])
+  if (result.error) return ''
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) || ''
+}
+
 async function uninstallCom0com(setupc) {
+  const command = await findCom0comUninstallCommand()
+  if (command) {
+    const result = await execFileAsync('cmd.exe', ['/c', command], {
+      cwd: path.dirname(setupc)
+    })
+    if (
+      !result.error ||
+      result.error.code === 3010 ||
+      /3010/.test(result.error.message || '')
+    ) {
+      return result
+    }
+  }
   return execFileAsync(setupc, ['uninstall'], { cwd: path.dirname(setupc) })
 }
 
@@ -1641,6 +1707,18 @@ ipcMain.handle('app:is-admin', async () => ({
   admin: await isWindowsAdmin()
 }))
 
+ipcMain.handle('virtual:com0com-status', async () => {
+  if (process.platform !== 'win32') {
+    return { platform: process.platform, installed: false, installer: false, admin: false }
+  }
+  return {
+    platform: 'win32',
+    installed: Boolean(com0comSetupPath()),
+    installer: Boolean(com0comInstallerPath()),
+    admin: await isWindowsAdmin()
+  }
+})
+
 ipcMain.handle('virtual:remove', async (_event, payload = {}) => {
   const portId = payload.portId
   const state = virtualPorts.get(portId)
@@ -1701,18 +1779,49 @@ ipcMain.handle('virtual:set-rules', async (_event, payload = {}) => {
   return { ok: true }
 })
 
+async function listWindowsRegistryPorts() {
+  if (process.platform !== 'win32') return []
+  const result = await execFileAsync('reg', [
+    'query',
+    'HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM'
+  ])
+  if (result.error) return []
+  const ports = []
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const match = /^\s*(COM\d+)\s+REG_SZ\s+(.+)$/i.exec(line)
+    if (!match) continue
+    ports.push({
+      path: match[1].toUpperCase(),
+      manufacturer: 'com0com',
+      serialNumber: '',
+      friendlyName: `com0com · ${match[2].trim()}`
+    })
+  }
+  return ports
+}
+
 ipcMain.handle('serial:list', async () => {
+  let ports = []
   try {
-    const ports = await SerialPort.list()
-    return ports.map((item) => ({
+    ports = (await SerialPort.list()).map((item) => ({
       path: item.path,
       manufacturer: item.manufacturer || '',
       serialNumber: item.serialNumber || '',
       friendlyName: item.friendlyName || item.path
     }))
-  } catch (error) {
-    return { error: error.message }
+  } catch {
+    ports = []
   }
+  if (process.platform === 'win32') {
+    const extra = await listWindowsRegistryPorts()
+    const known = new Set(ports.map((port) => port.path.toUpperCase()))
+    for (const port of extra) {
+      if (known.has(port.path)) continue
+      known.add(port.path)
+      ports.push(port)
+    }
+  }
+  return ports
 })
 
 ipcMain.handle('serial:encode', (_event, { text, encoding }) => {

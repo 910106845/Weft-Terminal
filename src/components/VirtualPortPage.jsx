@@ -94,6 +94,9 @@ export default function VirtualPortPage({
   const [deleteError, setDeleteError] = useState('');
   const [clearBusy, setClearBusy] = useState(false);
   const [clearError, setClearError] = useState('');
+  const [com0comInstalled, setCom0comInstalled] = useState(true);
+  const [com0comInstaller, setCom0comInstaller] = useState(false);
+  const [com0comNotice, setCom0comNotice] = useState('');
   const platform = window.terminalAPI?.platform || '';
   const adminBlocked = platform === 'win32' && isAdmin !== true;
   const adminRequired = platform === 'win32' && isAdmin === false;
@@ -101,9 +104,13 @@ export default function VirtualPortPage({
   useEffect(() => {
     if (platform !== 'win32') return;
     let cancelled = false;
-    window.terminalAPI?.isAdmin?.()
+    window.terminalAPI?.virtual
+      ?.com0comStatus?.()
       ?.then((result) => {
-        if (!cancelled) setIsAdmin(Boolean(result?.admin));
+        if (cancelled) return;
+        setIsAdmin(Boolean(result?.admin));
+        setCom0comInstalled(Boolean(result?.installed));
+        setCom0comInstaller(Boolean(result?.installer));
       })
       ?.catch?.(() => {
         if (!cancelled) setIsAdmin(false);
@@ -196,13 +203,18 @@ export default function VirtualPortPage({
   // 页面激活后，把还没创建过的端口建出来
   useEffect(() => {
     if (!active) return;
-    // Windows 需要先确认管理员权限，避免未提权时刷出一堆失败卡片
-    if (platform === 'win32' && isAdmin !== true) return;
+    // Windows 需要先确认管理员权限和 com0com 状态，避免未提权时刷出一堆失败卡片
+    if (
+      platform === 'win32' &&
+      (isAdmin !== true || com0comInstalled === false)
+    ) {
+      return;
+    }
     ports.forEach((port) => {
       if (runtime[port.id]) return;
       createPort(port);
     });
-  }, [active, ports, runtime, createPort, platform, isAdmin]);
+  }, [active, ports, runtime, createPort, platform, isAdmin, com0comInstalled]);
 
   // 规则改动同步到主进程
   useEffect(() => {
@@ -405,6 +417,30 @@ export default function VirtualPortPage({
     setDeleteTarget('');
   };
 
+  const resetAllPortsState = () => {
+    setPorts([]);
+    setRuntime({});
+    setLogs({});
+    setLastRxAt({});
+    setActivePortId('');
+    setDeleteTarget('');
+    setClearAllOpen(false);
+    setCopiedId('');
+    syncedRulesRef.current = {};
+  };
+
+  const installCom0com = async () => {
+    setCom0comNotice('');
+    const result = await window.terminalAPI?.virtual
+      ?.installCom0com?.()
+      ?.catch?.((error) => ({ ok: false, error: error?.message || String(error) }));
+    if (result?.ok) {
+      setCom0comNotice('已打开 com0com 安装程序，完成安装后请重启应用。');
+    } else {
+      setCom0comNotice(result?.error || '无法打开 com0com 安装程序');
+    }
+  };
+
   const clearAllPorts = async () => {
     setClearError('');
     setClearBusy(true);
@@ -449,15 +485,7 @@ export default function VirtualPortPage({
       );
       return;
     }
-    setPorts([]);
-    setRuntime({});
-    setLogs({});
-    setLastRxAt({});
-    setActivePortId('');
-    setDeleteTarget('');
-    setClearAllOpen(false);
-    setCopiedId('');
-    syncedRulesRef.current = {};
+    resetAllPortsState();
   };
 
   const copyPath = async (port) => {
@@ -778,16 +806,45 @@ export default function VirtualPortPage({
               type="button"
               className="virtual-add-port"
               onClick={addPort}
-              disabled={adminBlocked}
+              disabled={
+                adminBlocked ||
+                (platform === 'win32' && com0comInstalled === false)
+              }
               title={
                 adminRequired
                   ? '请以管理员身份重新打开应用后再新建虚拟串口'
-                  : undefined
+                  : platform === 'win32' && com0comInstalled === false
+                    ? '请先安装 com0com'
+                    : undefined
               }
             >
               <Icon name="plus" size={13} />
               新建虚拟串口
             </button>
+
+            {platform === 'win32' && com0comInstalled === false ? (
+              <>
+                <button
+                  type="button"
+                  className="virtual-add-port"
+                  disabled={adminBlocked || !com0comInstaller}
+                  title={
+                    adminRequired
+                      ? '请以管理员身份重新打开应用后再安装 com0com'
+                      : !com0comInstaller
+                        ? '未找到随应用附带的 com0com 安装程序'
+                        : undefined
+                  }
+                  onClick={installCom0com}
+                >
+                  <Icon name="download" size={13} />
+                  安装 com0com
+                </button>
+                {com0comNotice ? (
+                  <p className="virtual-port-hint">{com0comNotice}</p>
+                ) : null}
+              </>
+            ) : null}
 
             <button
               type="button"
@@ -807,7 +864,7 @@ export default function VirtualPortPage({
               清空全部虚拟串口
             </button>
 
-            {platform === 'win32' ? (
+            {platform === 'win32' && com0comInstalled ? (
               <button
                 type="button"
                 className="virtual-uninstall-com0com"
@@ -829,9 +886,11 @@ export default function VirtualPortPage({
 
             <p className="virtual-note">
               {platform === 'win32'
-                ? activeRuntime.externalPath
-                  ? `第三方软件请打开 ${activeRuntime.externalPath}；本应用内部占用 ${activeRuntime.internalPath}，不要打开它。波特率 115200。`
-                  : 'Windows 使用 com0com 创建端口对（需先安装 com0com），新建后会自动分配一对 COM 端口；把外部端口给第三方软件打开即可，波特率 115200。'
+                ? com0comInstalled === false
+                  ? '未安装 com0com。请点击上方「安装 com0com」，安装完成后重启应用。'
+                  : activeRuntime.externalPath
+                    ? `第三方软件请打开 ${activeRuntime.externalPath}；本应用内部占用 ${activeRuntime.internalPath}，不要打开它。波特率 115200。`
+                    : 'Windows 使用 com0com 创建端口对，新建后会自动分配一对 COM 端口；把外部端口给第三方软件打开即可，波特率 115200。'
                 : '用支持手填设备路径的工具打开选中的端口，波特率 115200。虚拟串口是 PTY，系统串口列表里看不到；关闭此页面会释放全部端口。'}
             </p>
           </aside>
@@ -1118,9 +1177,11 @@ export default function VirtualPortPage({
                         }));
                     setUninstallBusy(false);
                     if (result?.ok) {
-                      clearAllPorts();
+                      resetAllPortsState();
+                      setCom0comInstalled(false);
+                      setCom0comNotice('');
                       setUninstallResult(
-                        'com0com 已卸载。请重启电脑后再重新创建虚拟串口。'
+                        'com0com 已卸载。请重启电脑后再重新安装或创建虚拟串口。'
                       );
                     } else {
                       setUninstallResult(
