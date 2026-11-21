@@ -8258,26 +8258,56 @@ button:focus-visible,
   }
 }
 
-/* 宽屏下让“新建会话”模块在剩余空间内垂直居中，
-   并让左右留白随视口增长，避免整组内容挤在左上角。 */
+/* 宽屏下把品牌与“新建会话”作为一个整体垂直居中，
+   并按视口放大字号、行高和内容宽度，避免全屏时显得小而空。 */
 @media (min-width: 1241px) and (min-height: 761px) {
   .home-content {
-    display: grid;
-    grid-template-rows: auto 1fr;
-    grid-template-columns: minmax(0, 1fr);
-    justify-content: normal;
-    width: calc(488px + 2 * clamp(56px, 4.6vw, 112px));
-    max-width: 56%;
+    justify-content: center;
+    width: calc(clamp(488px, 34vw, 640px) + 2 * clamp(56px, 4.6vw, 112px));
+    max-width: 60%;
     padding: clamp(44px, 6.2vh, 92px) clamp(56px, 4.6vw, 112px);
-    gap: clamp(32px, 4.8vh, 60px);
+    gap: clamp(36px, 5vh, 64px);
   }
 
   .home-masthead {
-    width: min(100%, 500px);
+    width: min(100%, 560px);
+  }
+
+  .home-wordmark {
+    height: clamp(78px, 4.8vw, 104px);
+  }
+
+  .home-title {
+    font-size: clamp(24px, 1.45vw, 30px);
+  }
+
+  .home-eyebrow {
+    font-size: clamp(9px, 0.6vw, 10.5px);
   }
 
   .home-main {
-    align-self: center;
+    gap: clamp(18px, 2vh, 26px);
+  }
+
+  .home-action {
+    padding: clamp(14px, 1.6vh, 19px) clamp(12px, 1vw, 16px);
+  }
+
+  .home-action-icon {
+    width: clamp(38px, 2.2vw, 44px);
+    height: clamp(38px, 2.2vw, 44px);
+  }
+
+  .home-action-title {
+    font-size: clamp(13px, 0.78vw, 15px);
+  }
+
+  .home-action-desc {
+    font-size: clamp(11px, 0.65vw, 12.5px);
+  }
+
+  .home-action-tag {
+    font-size: clamp(7.5px, 0.45vw, 8.5px);
   }
 }
 
