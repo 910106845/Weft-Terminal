@@ -99,8 +99,14 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* 主题切换：以按钮为圆心、带柔和边缘和聚焦感的光晕扩散 */
-@property --vt-theme-r {
+/* 主题切换：以按钮为圆心的柔和光晕扩散 / 收拢 */
+@property --vt-new-r {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --vt-old-r {
   syntax: '<length>';
   inherits: false;
   initial-value: 0px;
@@ -108,44 +114,64 @@ body {
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation: none;
   mix-blend-mode: normal;
+  animation-duration: var(--theme-bloom-duration, 780ms);
+  animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  animation-fill-mode: both;
+  filter: drop-shadow(0 0 20px rgba(96, 165, 250, 0.42));
 }
 
 ::view-transition-old(root) {
-  z-index: 1;
-}
-
-::view-transition-new(root) {
-  z-index: 2;
-  --vt-theme-r: var(--theme-r0, 0px);
+  z-index: var(--theme-old-z, 1);
+  --vt-old-r: 200vmax;
   -webkit-mask-image: radial-gradient(
-    circle var(--vt-theme-r) at var(--theme-x, 50%) var(--theme-y, 50%),
+    circle var(--vt-old-r) at var(--theme-x, 50%) var(--theme-y, 50%),
     #000 0%,
     #000 90%,
     transparent 100%
   );
   mask-image: radial-gradient(
-    circle var(--vt-theme-r) at var(--theme-x, 50%) var(--theme-y, 50%),
+    circle var(--vt-old-r) at var(--theme-x, 50%) var(--theme-y, 50%),
     #000 0%,
     #000 90%,
     transparent 100%
   );
-  filter: drop-shadow(
-    0 0 18px color-mix(in srgb, var(--accent) 45%, transparent)
-  );
-  animation-name: theme-bloom;
-  animation-duration: var(--theme-bloom-duration, 780ms);
-  animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  animation-fill-mode: both;
+  animation-name: var(--theme-old-anim, none);
 }
 
-@keyframes theme-bloom {
+::view-transition-new(root) {
+  z-index: var(--theme-new-z, 2);
+  --vt-new-r: 200vmax;
+  -webkit-mask-image: radial-gradient(
+    circle var(--vt-new-r) at var(--theme-x, 50%) var(--theme-y, 50%),
+    #000 0%,
+    #000 90%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    circle var(--vt-new-r) at var(--theme-x, 50%) var(--theme-y, 50%),
+    #000 0%,
+    #000 90%,
+    transparent 100%
+  );
+  animation-name: var(--theme-new-anim, theme-expand);
+}
+
+@keyframes theme-expand {
   from {
-    --vt-theme-r: var(--theme-r0, 0px);
+    --vt-new-r: var(--theme-r0, 0px);
   }
   to {
-    --vt-theme-r: var(--theme-radius, 120vmax);
+    --vt-new-r: var(--theme-radius, 120vmax);
+  }
+}
+
+@keyframes theme-contract {
+  from {
+    --vt-old-r: var(--theme-radius, 120vmax);
+  }
+  to {
+    --vt-old-r: var(--theme-r0, 0px);
   }
 }
 

@@ -437,11 +437,26 @@ export default function App() {
         Math.max(y, window.innerHeight - y)
       )
       const root = document.documentElement
-      const startRadius = Math.max(12, rect ? rect.width / 2 : 16)
+      // 浅色 -> 深色：深色从按钮向外扩散
+      // 深色 -> 浅色：旧深色向按钮收拢，露出浅色
+      const contract = next === 'light'
+      const startRadius = contract
+        ? 0
+        : Math.max(12, rect ? rect.width / 2 : 16)
       root.style.setProperty('--theme-x', `${x}px`)
       root.style.setProperty('--theme-y', `${y}px`)
       root.style.setProperty('--theme-r0', `${startRadius}px`)
       root.style.setProperty('--theme-radius', `${radius * 1.16}px`)
+      root.style.setProperty('--theme-old-z', contract ? '2' : '1')
+      root.style.setProperty('--theme-new-z', contract ? '1' : '2')
+      root.style.setProperty(
+        '--theme-old-anim',
+        contract ? 'theme-contract' : 'none'
+      )
+      root.style.setProperty(
+        '--theme-new-anim',
+        contract ? 'none' : 'theme-expand'
+      )
 
       themeTransitionRef.current = true
       try {
