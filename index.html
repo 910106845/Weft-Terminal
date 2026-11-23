@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' ws: http: https:;"
+    />
+    <link rel="preconnect" href="https://prod.spline.design" crossorigin />
+    <link
+      rel="prefetch"
+      href="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+      as="fetch"
+      crossorigin
+    />
+    <title>Weft Terminal</title>
+    <script>
+      try {
+        var themeKey = 'serialdebug.theme'
+        var migratedKey = 'serialdebug.theme.darkDefault.v1'
+        if (!localStorage.getItem(migratedKey)) {
+          var savedTheme = localStorage.getItem(themeKey)
+          if (!savedTheme || savedTheme === 'system') {
+            localStorage.setItem(themeKey, 'dark')
+          }
+          localStorage.setItem(migratedKey, '1')
+        }
+        var pref = localStorage.getItem(themeKey) || 'dark'
+        var dark =
+          pref === 'dark' ||
+          (pref === 'system' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      } catch (error) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
