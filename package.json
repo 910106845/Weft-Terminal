@@ -11,7 +11,8 @@
     "build": "vite build",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder",
-    "postinstall": "node scripts/setup-native.cjs"
+    "postinstall": "node scripts/setup-native.cjs",
+    "publish:update": "node scripts/publish-update.cjs"
   },
   "dependencies": {
     "@splinetool/react-spline": "^4.2.0",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "ali-oss": "^6.23.0",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "24.8.8",

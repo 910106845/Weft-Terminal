@@ -3471,7 +3471,24 @@ ipcMain.handle('app:focus-tab', (_event, payload = {}) => {
 const UPDATE_OWNER = '910106845'
 const UPDATE_REPO = 'Weft-Terminal'
 const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_OWNER}/${UPDATE_REPO}/releases/latest`
+const UPDATE_MANIFEST_URL = String(
+  process.env.WEFT_UPDATE_MANIFEST ||
+    'https://shenzhen-img.oss-cn-shenzhen.aliyuncs.com/zhangfan/Weft-Terminal/latest.json'
+).trim()
 const UPDATE_CACHE_MS = 10 * 60 * 1000
+const UPDATE_MANIFEST_TIMEOUT_MS = 6000
+const UPDATE_TRUSTED_HOSTS = new Set([
+  'github.com',
+  'api.github.com',
+  'objects.githubusercontent.com',
+  'shenzhen-img.oss-cn-shenzhen.aliyuncs.com'
+])
+try {
+  const manifestHost = new URL(UPDATE_MANIFEST_URL).hostname.toLowerCase()
+  if (manifestHost) UPDATE_TRUSTED_HOSTS.add(manifestHost)
+} catch {
+  // 更新清单地址不可解析时由检查逻辑报错
+}
 const UPDATE_TOKEN = String(
   process.env.WEFT_UPDATE_TOKEN || process.env.GITHUB_TOKEN || ''
 ).trim()
@@ -3534,7 +3551,7 @@ function requestUpdateJson(url) {
     const request = net.request({ url, method: 'GET', redirect: 'follow' })
     request.setHeader('Accept', 'application/vnd.github+json')
     request.setHeader('User-Agent', `Weft-Terminal/${app.getVersion()}`)
-    if (UPDATE_TOKEN) {
+    if (UPDATE_TOKEN && isGithubHost) {
       request.setHeader('Authorization', `Bearer ${UPDATE_TOKEN}`)
     }
     request.on('response', (response) => {
@@ -3553,15 +3570,117 @@ function requestUpdateJson(url) {
   })
 }
 
-async function fetchLatestRelease(force = false) {
-  if (
-    !force &&
-    updateReleaseCache.payload &&
-    Date.now() - updateReleaseCache.at < UPDATE_CACHE_MS
-  ) {
-    return updateReleaseCache.payload
-  }
+function requestPublicJson(url, timeoutMs = UPDATE_MANIFEST_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const request = net.request({ url, method: 'GET', redirect: 'follow' })
+    request.setHeader('Accept', 'application/json')
+    request.setHeader('User-Agent', `Weft-Terminal/${app.getVersion()}`)
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      try {
+        request.abort()
+      } catch {
+        // 忽略
+      }
+      reject(new Error('请求超时'))
+    }, timeoutMs)
+    const done = (fn, value) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      fn(value)
+    }
+    request.on('response', (response) => {
+      const chunks = []
+      response.on('data', (chunk) => chunks.push(chunk))
+      response.on('end', () =>
+        done(resolve, {
+          status: response.statusCode,
+          text: Buffer.concat(chunks).toString('utf8')
+        })
+      )
+      response.on('error', (error) => done(reject, error))
+    })
+    request.on('error', (error) => done(reject, error))
+    request.end()
+  })
+}
 
+function pickManifestAsset(manifest) {
+  const platform =
+    process.platform === 'win32'
+      ? 'win32'
+      : process.platform === 'linux'
+        ? 'linux'
+        : 'darwin'
+  const entry = manifest?.assets?.[platform]
+  if (!entry?.url) return null
+  let name = String(entry.name || '').trim()
+  if (!name) {
+    try {
+      name = path.basename(new URL(entry.url).pathname) || 'weft-terminal-update'
+    } catch {
+      name = 'weft-terminal-update'
+    }
+  }
+  return {
+    name,
+    url: entry.url,
+    size: Number(entry.size) || 0,
+    sha256: String(entry.sha256 || '').trim().toLowerCase(),
+    contentType: entry.contentType || ''
+  }
+}
+
+async function fetchOssManifest() {
+  const currentVersion = app.getVersion()
+  let response
+  try {
+    response = await requestPublicJson(UPDATE_MANIFEST_URL)
+  } catch (error) {
+    return {
+      ok: false,
+      error: `国内更新源不可用：${error?.message || String(error)}`
+    }
+  }
+  if (response.status < 200 || response.status >= 300) {
+    return { ok: false, error: `国内更新源返回 ${response.status}` }
+  }
+  let manifest
+  try {
+    manifest = JSON.parse(response.text)
+  } catch {
+    return { ok: false, error: '国内更新清单无法解析' }
+  }
+  const latestVersion = String(manifest.version || '')
+    .trim()
+    .replace(/^v/i, '')
+  if (!latestVersion) {
+    return { ok: false, error: '国内更新清单缺少版本号' }
+  }
+  const available =
+    compareUpdateVersions(latestVersion, currentVersion) > 0
+  return {
+    ok: true,
+    available,
+    currentVersion,
+    latestVersion,
+    tag: `v${latestVersion}`,
+    releaseName: manifest.title || `Weft Terminal ${latestVersion}`,
+    notes: manifest.notes || '',
+    publishedAt: manifest.publishedAt || '',
+    releaseUrl:
+      manifest.releaseUrl ||
+      `https://github.com/${UPDATE_OWNER}/${UPDATE_REPO}/releases`,
+    asset: available ? pickManifestAsset(manifest) : null,
+    checkedAt: Date.now(),
+    source: 'oss'
+  }
+}
+
+async function fetchGithubLatestRelease() {
   const currentVersion = app.getVersion()
   let response
   try {
@@ -3586,9 +3705,9 @@ async function fetchLatestRelease(force = false) {
       publishedAt: '',
       releaseUrl: releasesUrl,
       asset: null,
-      checkedAt: Date.now()
+      checkedAt: Date.now(),
+      source: 'github'
     }
-    updateReleaseCache = { at: Date.now(), payload }
     return payload
   }
 
@@ -3635,10 +3754,39 @@ async function fetchLatestRelease(force = false) {
           contentType: asset.content_type || ''
         }
       : null,
-    checkedAt: Date.now()
+    checkedAt: Date.now(),
+    source: 'github'
   }
-  updateReleaseCache = { at: Date.now(), payload }
   return payload
+}
+
+async function fetchLatestRelease(force = false) {
+  if (
+    !force &&
+    updateReleaseCache.payload &&
+    Date.now() - updateReleaseCache.at < UPDATE_CACHE_MS
+  ) {
+    return updateReleaseCache.payload
+  }
+
+  const ossPayload = await fetchOssManifest()
+  if (ossPayload.ok) {
+    updateReleaseCache = { at: Date.now(), payload: ossPayload }
+    return ossPayload
+  }
+
+  const githubPayload = await fetchGithubLatestRelease()
+  if (githubPayload.ok) {
+    updateReleaseCache = { at: Date.now(), payload: githubPayload }
+    return githubPayload
+  }
+
+  return {
+    ok: false,
+    error: `检查更新失败：${ossPayload.error}；GitHub 备用源不可用：${
+      githubPayload.error || '未知错误'
+    }`
+  }
 }
 
 function uniqueUpdatePath(dir, fileName) {
@@ -3669,11 +3817,12 @@ async function downloadUpdateAsset(event, asset) {
   } catch {
     return { ok: false, error: '更新包地址无效' }
   }
+  const downloadHost = parsed.hostname.toLowerCase()
+  const isGithubHost =
+    /(^|\.)github\.com$|(^|\.)githubusercontent\.com$/i.test(downloadHost)
   if (
     parsed.protocol !== 'https:' ||
-    !/^(github\.com|api\.github\.com|objects\.githubusercontent\.com)$/i.test(
-      parsed.hostname
-    )
+    !UPDATE_TRUSTED_HOSTS.has(downloadHost)
   ) {
     return { ok: false, error: '更新包地址不受信任' }
   }
@@ -3688,6 +3837,7 @@ async function downloadUpdateAsset(event, asset) {
   let received = 0
   let total = Number(asset.size) || 0
   let lastNotified = 0
+  const digest = asset.sha256 ? crypto.createHash('sha256') : null
 
   const notify = (extra = {}) => {
     if (event.sender.isDestroyed()) return
@@ -3753,6 +3903,7 @@ async function downloadUpdateAsset(event, asset) {
       updateDownloadWriter = writer
       response.on('data', (chunk) => {
         received += chunk.length
+        if (digest) digest.update(chunk)
         const now = Date.now()
         if (now - lastNotified > 120) {
           lastNotified = now
@@ -3761,13 +3912,19 @@ async function downloadUpdateAsset(event, asset) {
       })
       pipeline(response, writer)
         .then(() => {
+          const actualSha256 = digest ? digest.digest('hex') : ''
+          if (asset.sha256 && actualSha256 !== asset.sha256) {
+            finish({ ok: false, error: '安装包校验失败，请重试' })
+            return
+          }
           notify({ done: true })
           lastUpdateFilePath = destination
           finish({
             ok: true,
             filePath: destination,
             fileName: path.basename(destination),
-            size: received
+            size: received,
+            sha256: actualSha256
           })
         })
         .catch((error) => {
