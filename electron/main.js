@@ -10,8 +10,9 @@ const { pipeline } = require('stream/promises')
 let autoUpdater = null
 let CancellationToken = null
 if (process.platform === 'win32') {
-  ;({ autoUpdater } = require('electron-updater'))
-  ;({ CancellationToken } = require('builder-util-runtime'))
+  const updater = require('electron-updater')
+  autoUpdater = updater.autoUpdater
+  CancellationToken = updater.CancellationToken
 }
 
 const { EventEmitter } = require('events')
