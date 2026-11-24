@@ -122,6 +122,11 @@ export default function SessionFolders({
     if (tabId) onMoveTab(tabId, folderId)
     setDragId('')
     setDropId('')
+    // 源选项卡移入文件夹后会重新渲染，dragend 可能不会触发。
+    // 这里主动复位，否则 justDraggedRef 会一直是 true，之后的点击都被忽略。
+    setTimeout(() => {
+      justDraggedRef.current = false
+    }, 60)
   }
 
   const allowDrop = (folderId) => (event) => {
