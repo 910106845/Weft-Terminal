@@ -3806,9 +3806,10 @@ function uniqueUpdatePath(dir, fileName) {
 }
 
 async function downloadUpdateAsset(event, asset) {
-  const downloadsDir = app.getPath('downloads')
-  await fs.mkdir(downloadsDir, { recursive: true })
-  const destination = uniqueUpdatePath(downloadsDir, asset.name)
+  // 放在应用数据目录，避免 macOS 对 Downloads 的目录权限弹窗
+  const updatesDir = path.join(app.getPath('userData'), 'updates')
+  await fs.mkdir(updatesDir, { recursive: true })
+  const destination = uniqueUpdatePath(updatesDir, asset.name)
 
   const downloadUrl = UPDATE_TOKEN && asset.apiUrl ? asset.apiUrl : asset.url
   let parsed
