@@ -4110,22 +4110,28 @@ async function installUpdateFile(filePath) {
   }
   if (process.platform === 'win32') {
     const isMsi = /\.msi$/i.test(filePath)
-    const child = isMsi
-      ? spawn('msiexec.exe', ['/i', filePath, '/qn'], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true
-        })
-      : spawn(filePath, ['/S'], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true
-        })
-    child.unref()
-    setTimeout(() => {
-      app.relaunch()
-      app.exit(0)
-    }, 1200)
+    if (isMsi) {
+      const quotePs = (value) =>
+        `'${String(value).replace(/'/g, "''")}'`
+      const script =
+        `Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i',${quotePs(
+          filePath
+        )},'/qn' -Wait; ` +
+        `Start-Process -FilePath ${quotePs(app.getPath('exe'))}`
+      spawn(
+        'powershell.exe',
+        ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', script],
+        { detached: true, stdio: 'ignore', windowsHide: true }
+      ).unref()
+    } else {
+      // NSIS 静默升级：安装器的 customInstall 会结束旧进程并启动新版本
+      spawn(filePath, ['/S', '--updated'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      }).unref()
+    }
+    setTimeout(() => app.exit(0), 500)
     return { ok: true }
   }
   const message = await shell.openPath(filePath)
