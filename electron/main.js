@@ -3573,8 +3573,12 @@ function requestUpdateJson(url) {
 function requestPublicJson(url, timeoutMs = UPDATE_MANIFEST_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     let settled = false
-    const request = net.request({ url, method: 'GET', redirect: 'follow' })
+    // 清单必须实时获取，不能使用 Electron 的 HTTP 缓存
+    const bustUrl = `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`
+    const request = net.request({ url: bustUrl, method: 'GET', redirect: 'follow' })
     request.setHeader('Accept', 'application/json')
+    request.setHeader('Cache-Control', 'no-cache, no-store, max-age=0')
+    request.setHeader('Pragma', 'no-cache')
     request.setHeader('User-Agent', `Weft-Terminal/${app.getVersion()}`)
     const timer = setTimeout(() => {
       if (settled) return

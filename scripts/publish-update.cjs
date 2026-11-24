@@ -173,7 +173,9 @@ async function main () {
   console.log(`[manifest] ${manifestKey}`)
   await client.put(manifestKey, manifestBody, {
     headers: {
-      'Content-Type': 'application/json; charset=utf-8'
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Expires': '0'
     }
   })
   await client.putACL(manifestKey, 'public-read')
