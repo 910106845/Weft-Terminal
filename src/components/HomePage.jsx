@@ -216,8 +216,8 @@ export default function HomePage({
           <div className="home-scan" aria-hidden="true">
             <GridScan
               className="home-gridscan"
-              linesColor={dark ? '#30445c' : '#d3dce8'}
-              scanColor="#040420"
+              linesColor={dark ? '#3a3a3d' : '#d3dce8'}
+              scanColor="#0a0a0c"
               cells={10}
               lineThickness={1}
               depth={3.1}
@@ -229,10 +229,10 @@ export default function HomePage({
               scanDelay={1.1}
               trail={0.39}
               glow={dark ? 0.7 : 0.42}
-              autoScan
+              autoScan={false}
               interactive={false}
               clickEffect="none"
-              intro
+              intro={false}
               lightMode={!dark}
               dpr={Math.min(window.devicePixelRatio || 1, 1.75)}
             />

@@ -246,6 +246,23 @@ export default function Icon({ name, size = 15, className = '' }) {
           <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" />
         </svg>
       )
+    case 'monitor':
+      return (
+        <svg {...props}>
+          <rect x="3" y="4" width="18" height="12" rx="2" />
+          <path d="M8 20h8" />
+          <path d="M12 16v4" />
+        </svg>
+      )
+    case 'exit-split':
+      return (
+        <svg {...props}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M14.5 5v14" />
+          <path d="M17.5 12H9.5" />
+          <path d="M12 9.5L9.5 12l2.5 2.5" />
+        </svg>
+      )
     case 'search':
       return (
         <svg {...props}>

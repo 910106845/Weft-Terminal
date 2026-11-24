@@ -158,27 +158,27 @@ const LIGHT_TERM_THEME = {
 }
 
 const DARK_TERM_THEME = {
-  background: '#08111f',
-  foreground: '#d7e4f2',
+  background: '#0b0b0c',
+  foreground: '#e8e8ea',
   cursor: '#7ef0c6',
-  cursorAccent: '#08111f',
+  cursorAccent: '#0b0b0c',
   selectionBackground: 'rgba(126, 240, 198, 0.24)',
-  black: '#0d1a2b',
+  black: '#101012',
   red: '#ff7a90',
   green: '#7ef0c6',
   yellow: '#f4d58d',
   blue: '#72c7ff',
   magenta: '#c39bff',
   cyan: '#6fe8f1',
-  white: '#d7e4f2',
-  brightBlack: '#607286',
+  white: '#e8e8ea',
+  brightBlack: '#85858a',
   brightRed: '#ff9caf',
   brightGreen: '#a9ffde',
   brightYellow: '#ffe3a3',
   brightBlue: '#9ad8ff',
   brightMagenta: '#ddbfff',
   brightCyan: '#a6f7ff',
-  brightWhite: '#f4f9ff'
+  brightWhite: '#f5f5f6'
 }
 
 const ENHANCED_LIGHT_TERM_THEME = {
@@ -206,20 +206,20 @@ const ENHANCED_LIGHT_TERM_THEME = {
 }
 
 const ENHANCED_DARK_TERM_THEME = {
-  background: '#070d16',
-  foreground: '#eef7ff',
+  background: '#0b0b0c',
+  foreground: '#eef0f2',
   cursor: '#86ffd6',
-  cursorAccent: '#070d16',
+  cursorAccent: '#0b0b0c',
   selectionBackground: 'rgba(134, 255, 214, 0.24)',
-  black: '#0d1c2c',
+  black: '#101012',
   red: '#ff8096',
   green: '#86ffd6',
   yellow: '#ffe19a',
   blue: '#83d3ff',
   magenta: '#d0b0ff',
   cyan: '#8cf5ff',
-  white: '#eef7ff',
-  brightBlack: '#6d8298',
+  white: '#eef0f2',
+  brightBlack: '#8a8a8f',
   brightRed: '#ffabb9',
   brightGreen: '#b7ffe9',
   brightYellow: '#fff0c4',

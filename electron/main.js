@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, webContents, net } = require('electron')
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, webContents, net, nativeTheme } = require('electron')
 const path = require('path')
 const os = require('os')
 const crypto = require('crypto')
@@ -901,13 +901,23 @@ function findWindowById(windowId) {
 }
 
 function createWindow(windowId = 'main') {
+  const isMac = process.platform === 'darwin'
   const browserWindow = new BrowserWindow({
     width: 1440,
     height: 960,
     minWidth: 1080,
     minHeight: 680,
     title: APP_DISPLAY_NAME,
-    backgroundColor: '#f4f4f4',
+    // 跟随系统主题，避免深色环境下启动时闪一下浅色背景
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0c0c0d' : '#f4f4f4',
+    // macOS 使用隐藏式标题栏：去掉系统标题文字，信号灯悬浮在应用顶部栏内。
+    // Windows/Linux 保持系统原生边框，避免自绘窗口按钮的兼容问题。
+    ...(isMac
+      ? {
+          titleBarStyle: 'hiddenInset',
+          trafficLightPosition: { x: 20, y: 19 }
+        }
+      : {}),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

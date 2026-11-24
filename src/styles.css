@@ -43,19 +43,19 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #090d13;
-  --bg-glow: rgba(65, 132, 255, 0.13);
-  --surface: #111821;
-  --surface-2: #0d141c;
-  --surface-3: #1a2431;
-  --surface-hover: #162130;
-  --border: #202c3a;
-  --border-soft: #1a2532;
-  --border-strong: #2e3d4f;
-  --pane-border: #46586c;
-  --text: #e7edf5;
-  --text-2: #9dacbe;
-  --text-3: #6f8095;
+  --bg: #0c0c0d;
+  --bg-glow: rgba(255, 255, 255, 0.03);
+  --surface: #161617;
+  --surface-2: #101011;
+  --surface-3: #242426;
+  --surface-hover: #1d1d1f;
+  --border: #2a2a2c;
+  --border-soft: #1f1f21;
+  --border-strong: #3a3a3d;
+  --pane-border: #4b4b4e;
+  --text: #f0f0f1;
+  --text-2: #a5a5a8;
+  --text-3: #75757a;
   --accent: #4d9bff;
   --accent-strong: #2f7cf0;
   --accent-soft: rgba(77, 155, 255, 0.14);
@@ -65,19 +65,19 @@
   --danger: #ff6b6b;
   --danger-soft: rgba(255, 107, 107, 0.12);
   --warning: #e0a84a;
-  --ssh: #aeb8c6;
-  --ssh-soft: rgba(174, 184, 198, 0.14);
-  --ssh-border: rgba(174, 184, 198, 0.28);
+  --ssh: #c0c0c3;
+  --ssh-soft: rgba(192, 192, 195, 0.14);
+  --ssh-border: rgba(192, 192, 195, 0.28);
   --warning-soft: rgba(224, 168, 74, 0.14);
-  --console-bg: #070b10;
-  --console-gutter: #0d131b;
-  --console-line: #151f2b;
-  --console-text: #dbe4ef;
-  --console-muted: #607286;
+  --console-bg: #0a0a0b;
+  --console-gutter: #121213;
+  --console-line: #222224;
+  --console-text: #e6e6e8;
+  --console-muted: #85858a;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
   --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 28px 80px rgba(0, 0, 0, 0.55);
-  --topbar-bg: rgba(9, 13, 19, 0.8);
+  --topbar-bg: rgba(12, 12, 13, 0.8);
 }
 
 * {
@@ -235,7 +235,9 @@ button {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background:
+    radial-gradient(1100px 600px at 82% -12%, var(--bg-glow), transparent 62%),
+    var(--bg);
 }
 
 .tab-strip {
@@ -246,10 +248,59 @@ button {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
+}
+
+/* ---------- macOS 自定义标题栏 ---------- */
+/* 隐藏系统标题栏后，由顶部栏承担拖动窗口的职责 */
+:root[data-platform='darwin'] .tab-strip {
+  -webkit-app-region: drag;
+  height: 52px;
+  padding: 8px 10px 6px 88px;
+  border-bottom: none;
+  background: transparent;
+}
+
+/* 顶部栏里的控件保持可点击，其余空白区域用于拖动 */
+:root[data-platform='darwin'] .tab-strip > * {
+  -webkit-app-region: no-drag;
+}
+
+/* 内容区做成一整块悬浮卡片，和顶部栏之间留出间隙 */
+:root[data-platform='darwin'] .session-stack {
+  margin: 0 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+/* 首页顶部与标题栏自然过渡：网格和机器人从背景中淡入（真正的透明渐变） */
+:root[data-platform='darwin'] .session-stack.is-home .home-scan {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 64px);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 64px);
+}
+
+:root[data-platform='darwin'] .session-stack.is-home .home-spline {
+  -webkit-mask-image:
+    linear-gradient(180deg, transparent 0%, #000 64px),
+    linear-gradient(90deg, transparent 0%, #000 32%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, transparent 0%, #000 64px),
+    linear-gradient(90deg, transparent 0%, #000 32%);
+  mask-composite: intersect;
+}
+
+/* 首页不需要卡片边界，直接融入窗口背景（保持全宽全高） */
+:root[data-platform='darwin'] .session-stack.is-home {
+  margin: 0;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
 }
 
 .tab-cards {
@@ -257,7 +308,7 @@ button {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   overflow-x: auto;
   padding: 1px;
 }
@@ -514,7 +565,7 @@ button {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
 }
 
 .tab-layout-wrap {
@@ -692,6 +743,42 @@ button {
 .tab-action.is-active {
   background: var(--surface-3);
   color: var(--text);
+}
+
+/* ---------- 全局快速提示 ---------- */
+.fast-tooltip {
+  position: fixed;
+  z-index: 1200;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: pre-line;
+  pointer-events: none;
+  box-shadow: var(--shadow-md);
+  animation: fast-tooltip-in 0.12s ease both;
+}
+
+.fast-tooltip.is-bottom {
+  transform: translateX(-50%);
+}
+
+.fast-tooltip.is-top {
+  transform: translate(-50%, -100%);
+}
+
+@keyframes fast-tooltip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 
@@ -1115,7 +1202,7 @@ body.is-resizing-split-column * {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 18px;
+  padding: 0 5px;
   border-bottom: 1px solid var(--border);
   background: var(--topbar-bg);
   backdrop-filter: blur(18px);
@@ -2002,7 +2089,7 @@ kbd {
   min-height: 0;
   display: flex;
   gap: 12px;
-  padding: 14px 18px 10px;
+  padding: 2px 5px;
 }
 
 .sidebar-shell {
@@ -3183,7 +3270,7 @@ button:focus-visible,
 }
 
 :root[data-theme='dark'] .log-hl-debug {
-  color: #cbd5e1;
+  color: #d4d4d6;
 }
 
 :root[data-theme='dark'] .log-hl-method {
@@ -3900,7 +3987,7 @@ button:focus-visible,
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 18px;
+  padding: 0 5px;
   border-top: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-3);
@@ -3968,16 +4055,16 @@ button:focus-visible,
 
 :root[data-theme='dark'] .serial-page,
 :root[data-theme='dark'] .virtual-page {
-  --term-panel: #070d16;
-  --term-head: #0c141d;
-  --term-border: #1b2a3c;
-  --term-muted: #71839a;
+  --term-panel: #0b0b0c;
+  --term-head: #131314;
+  --term-border: #2b2b2d;
+  --term-muted: #8a8a8f;
 }
 
 .serial-page .statusbar,
 .virtual-page .statusbar {
   height: 28px;
-  padding: 0 14px;
+  padding: 0 5px;
   border-top-color: var(--term-border);
   background: linear-gradient(180deg, var(--term-head), var(--term-panel));
   color: var(--term-muted);
@@ -5285,7 +5372,7 @@ button:focus-visible,
 
 :root[data-theme='dark'] .tab-card.tab-scheme-slate {
   --tab-bg: #111827;
-  --tab-fg: #cbd5e1;
+  --tab-fg: #d4d4d6;
   --tab-accent: #94a3b8;
   --tab-soft: rgba(148, 163, 184, 0.16);
   --tab-border: rgba(148, 163, 184, 0.24);
@@ -5444,20 +5531,20 @@ button:focus-visible,
 }
 
 :root[data-theme='dark'] .terminal-page {
-  --term-panel: #070d16;
-  --term-head: #0c141d;
-  --term-border: #1b2a3c;
-  --term-muted: #71839a;
-  --term-text: #d7e4f2;
+  --term-panel: #0b0b0c;
+  --term-head: #131314;
+  --term-border: #2b2b2d;
+  --term-muted: #8a8a8f;
+  --term-text: #e8e8ea;
   --term-scroll: rgba(149, 177, 204, 0.2);
-  --term-overlay: rgba(8, 17, 31, 0.8);
+  --term-overlay: rgba(12, 12, 13, 0.8);
 }
 
 .terminal-stage {
   flex: 1;
   min-height: 0;
   display: flex;
-  padding: 14px 18px 10px;
+  padding: 2px 5px;
 }
 
 .terminal-panel {
@@ -5477,7 +5564,7 @@ button:focus-visible,
 .terminal-panel.is-alt-screen {
   --term-panel: #070e18;
   --term-head: #0b1522;
-  --term-border: #1b2a3c;
+  --term-border: #2b2b2d;
   --term-muted: #7890a6;
   --term-text: #e8f1f9;
   --term-scroll: rgba(160, 190, 220, 0.2);
@@ -6559,14 +6646,14 @@ button:focus-visible,
   --term-accent: #34d399;
   --term-accent-soft: rgba(52, 211, 153, 0.13);
   --term-glow: rgba(52, 211, 153, 0.08);
-  --term-panel: #070d16;
-  --term-panel-deep: #04080e;
-  --term-head: #0c141d;
-  --term-border: #1b2a3c;
-  --term-muted: #71839a;
-  --term-text: #dbe8f5;
+  --term-panel: #0b0b0c;
+  --term-panel-deep: #080809;
+  --term-head: #131314;
+  --term-border: #2b2b2d;
+  --term-muted: #8a8a8f;
+  --term-text: #e6e6e8;
   --term-scroll: rgba(149, 177, 204, 0.2);
-  --term-overlay: rgba(7, 17, 31, 0.82);
+  --term-overlay: rgba(10, 10, 11, 0.82);
 }
 
 :root[data-theme='dark'] .terminal-page.is-ssh {
@@ -6638,7 +6725,7 @@ button:focus-visible,
 
 .terminal-page .terminal-panel-head {
   height: 46px;
-  padding: 0 18px;
+  padding: 0 5px;
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.82),
@@ -6718,7 +6805,7 @@ button:focus-visible,
 
 .terminal-page .statusbar {
   height: 32px;
-  padding: 0 20px;
+  padding: 0 5px;
   border-top-color: var(--term-border);
   background: linear-gradient(180deg, var(--term-head), var(--term-panel));
   color: var(--term-muted);
@@ -6980,13 +7067,13 @@ button:focus-visible,
 }
 
 :root[data-theme='dark'] {
-  --btn-bg: #131b25;
-  --btn-bg-hover: #18222e;
-  --btn-bg-active: #0f1620;
-  --btn-border: #24303f;
-  --btn-border-hover: #33445a;
-  --btn-fg: #9dacbe;
-  --btn-fg-hover: #e7edf5;
+  --btn-bg: #1a1a1c;
+  --btn-bg-hover: #232325;
+  --btn-bg-active: #141415;
+  --btn-border: #2c2c2e;
+  --btn-border-hover: #3d3d40;
+  --btn-fg: #a5a5a8;
+  --btn-fg-hover: #f0f0f1;
   --btn-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
   --btn-shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.38);
   --btn-shadow-active: 0 1px 1px rgba(0, 0, 0, 0.25);
@@ -7049,10 +7136,10 @@ button:focus-visible,
 :root[data-theme='dark'] .icon-btn,
 :root[data-theme='dark'] .tab-action,
 :root[data-theme='dark'] .port-trigger {
-  --btn-bg-hover: #1a2431;
-  --btn-bg-active: #16202c;
-  --btn-fg: #9dacbe;
-  --btn-fg-hover: #e7edf5;
+  --btn-bg-hover: #242426;
+  --btn-bg-active: #232325;
+  --btn-fg: #a5a5a8;
+  --btn-fg-hover: #f0f0f1;
 }
 
 :root[data-theme='dark'] .tab-add {
@@ -7265,7 +7352,7 @@ button:focus-visible,
 
 :root[data-theme='dark'] .terminal-page .terminal-panel {
   box-shadow:
-    0 24px 60px rgba(3, 9, 18, 0.42),
+    0 24px 60px rgba(6, 6, 7, 0.42),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -7501,8 +7588,8 @@ button:focus-visible,
 }
 
 :root[data-theme='dark'] .status-capsule {
-  background: #0d141c;
-  border-color: #202c3a;
+  background: #101011;
+  border-color: #2a2a2c;
   box-shadow: none;
 }
 
@@ -7552,7 +7639,7 @@ button:focus-visible,
 /* specular 主按钮 / 状态胶囊在深色主题里的底色 */
 :root[data-theme='dark'] {
   --spec-btn-bg: #23252b;
-  --spec-btn-bg-hover: #2a2c33;
+  --spec-btn-bg-hover: #2a2a2c;
   --capsule-bg: #23252b;
 }
 
@@ -8060,7 +8147,7 @@ button:focus-visible,
 .virtual-body {
   flex: 1;
   min-height: 0;
-  padding: 14px 18px 10px;
+  padding: 2px 5px;
 }
 
 .virtual-grid {
@@ -8075,6 +8162,16 @@ button:focus-visible,
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* 非抽屉模式：左侧串口列表也使用与右侧一致的卡片容器 */
+.virtual-page:not(.is-split-drawer) .virtual-rail {
+  padding: 14px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
 .virtual-main {
@@ -8224,16 +8321,18 @@ button:focus-visible,
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .virtual-rail-head h2 {
   flex: none;
   margin: 0;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-2);
+  letter-spacing: 0.01em;
+  color: var(--text);
 }
 
 .virtual-count {
@@ -8255,7 +8354,7 @@ button:focus-visible,
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
-  padding: 4px 6px 6px 4px;
+  padding: 4px 2px 6px;
 }
 
 .virtual-port-card {
@@ -8318,7 +8417,7 @@ button:focus-visible,
   --card-btn-border: rgba(255, 255, 255, 0.13);
   --card-btn-border-hover: rgba(255, 255, 255, 0.22);
   --card-btn-fg: #e6eaf2;
-  --card-shadow: 0 14px 30px -20px rgba(6, 10, 20, 0.55);
+  --card-shadow: 0 14px 30px -20px rgba(0, 0, 0, 0.55);
 }
 
 .virtual-port-card.is-active {
@@ -8353,7 +8452,7 @@ button:focus-visible,
       rgba(160, 130, 255, 0.18) 0%,
       rgba(160, 130, 255, 0) 60%
     ),
-    linear-gradient(180deg, #182132 0%, #121926 100%);
+    linear-gradient(180deg, #1a1a1c 0%, #131314 100%);
   --card-shadow:
     0 0 0 3px rgba(77, 155, 255, 0.16),
     0 16px 34px -20px rgba(77, 155, 255, 0.5);
@@ -8529,7 +8628,7 @@ button:focus-visible,
 
 :root[data-theme='dark'] .wvp-page .virtual-port-card.is-active {
   --card-border: color-mix(in srgb, var(--accent) 40%, var(--border));
-  --card-bg: linear-gradient(180deg, #151c26 0%, #10161e 100%);
+  --card-bg: linear-gradient(180deg, #1a1a1c 0%, #131314 100%);
   --card-shadow:
     0 12px 28px -22px color-mix(in srgb, var(--accent) 60%, transparent),
     var(--shadow-sm);
@@ -9492,16 +9591,18 @@ button:focus-visible,
   --home-line-soft: rgba(13, 24, 38, 0.05);
   --home-scrim: rgba(238, 242, 247, 0.9);
   --home-scrim-mid: rgba(238, 242, 247, 0.44);
+  /* 背景交给 app-shell，让首页与顶部栏共用同一层渐变，交界处不出现断带 */
+  background: transparent;
 }
 
 :root[data-theme='dark'] .home-page {
   --home-bg: transparent;
-  --home-fg: #eef4fc;
-  --home-muted: #94a5ba;
+  --home-fg: #f0f0f1;
+  --home-muted: #a5a5a8;
   --home-line: rgba(158, 186, 220, 0.16);
   --home-line-soft: rgba(158, 186, 220, 0.07);
-  --home-scrim: rgba(9, 13, 19, 0.88);
-  --home-scrim-mid: rgba(9, 13, 19, 0.42);
+  --home-scrim: rgba(10, 10, 11, 0.88);
+  --home-scrim-mid: rgba(10, 10, 11, 0.42);
 }
 
 .home-topbar {
@@ -9786,7 +9887,7 @@ button:focus-visible,
 }
 
 :root[data-theme='dark'] .home-action.is-ssh {
-  --action-accent: #aeb8c6;
+  --action-accent: #c0c0c3;
   --action-soft: rgba(174, 184, 198, 0.12);
 }
 
@@ -9950,7 +10051,7 @@ button:focus-visible,
 }
 
 .tab-action.is-icon {
-  width: 32px;
+  width: 30px;
   padding: 0;
   justify-content: center;
 }

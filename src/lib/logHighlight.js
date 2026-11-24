@@ -84,7 +84,7 @@ const DARK_TERMINAL_COLORS = {
   error: { fg: '#ffb4ab' },
   warn: { fg: '#fcd34d' },
   info: { fg: '#bae6fd' },
-  debug: { fg: '#cbd5e1' },
+  debug: { fg: '#d4d4d6' },
   method: { fg: '#bfdbfe' },
   duration: { fg: '#fcd34d' }
 }

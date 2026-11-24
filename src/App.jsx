@@ -9,6 +9,7 @@ import WindowsVirtualPage from './components/WindowsVirtualPage'
 import SessionFolders from './components/SessionFolders'
 import SshConnectDialog from './components/SshConnectDialog'
 import Modal from './components/Modal'
+import FastTooltip from './components/FastTooltip'
 import Icon from './components/Icons'
 import { normalizeFavorites } from './lib/favorites'
 import { normalizeTerminalCommands } from './lib/terminalCommands'
@@ -102,7 +103,7 @@ function normalizeBauds(value) {
 }
 
 const TAB_COLOR_SCHEMES = [
-  { id: 'default', label: '默认', swatch: '#8d9aab', swatchDark: '#71839a' },
+  { id: 'default', label: '默认', swatch: '#8d9aab', swatchDark: '#8a8a8f' },
   { id: 'ocean', label: '海蓝', swatch: '#2563eb', swatchDark: '#60a5fa' },
   { id: 'forest', label: '森绿', swatch: '#0f9d78', swatchDark: '#34d399' },
   { id: 'amber', label: '琥珀', swatch: '#b7791f', swatchDark: '#e0a84a' },
@@ -203,6 +204,21 @@ const TAB_SCHEME_DARK_ACCENTS = {
   slate: '#94a3b8'
 }
 
+// 主题模式：跟随系统 / 浅色 / 深色，循环切换
+const THEME_MODE_LABEL = { light: '浅色', dark: '深色', system: '跟随系统' }
+const THEME_MODES = ['system', 'light', 'dark']
+
+function nextThemeMode(mode) {
+  const index = THEME_MODES.indexOf(mode)
+  return THEME_MODES[(index + 1) % THEME_MODES.length]
+}
+
+function themeIconName(mode) {
+  if (mode === 'light') return 'sun'
+  if (mode === 'dark') return 'moon'
+  return 'monitor'
+}
+
 // 状态胶囊跟随标签左侧强调色（含深浅主题差异）
 function tabStatusAccent(tab, theme) {
   const dark = theme === 'dark'
@@ -214,7 +230,7 @@ function tabStatusAccent(tab, theme) {
   }
   if (tab.kind === 'virtual') return dark ? '#a78bfa' : '#7c3aed'
   if (tab.kind === 'serial') return dark ? '#4d9bff' : '#2563eb'
-  if (tab.terminalType === 'ssh') return dark ? '#aeb8c6' : '#2f343c'
+  if (tab.terminalType === 'ssh') return dark ? '#c0c0c3' : '#2f343c'
   return dark ? '#34d399' : '#0f9d78'
 }
 
@@ -648,8 +664,16 @@ export default function App() {
     [],
     normalizeSshProfiles
   )
-  const [themePref, setThemePref] = useSharedString('serialdebug.theme', 'dark')
-  const [resolvedTheme, setResolvedTheme] = useState('light')
+  const [themePref, setThemePref] = useSharedString('serialdebug.theme', 'system')
+  // 首帧就按偏好/系统算出实际主题，避免深色环境下先闪一下浅色
+  const [resolvedTheme, setResolvedTheme] = useState(() => {
+    if (themePref === 'system') {
+      return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches
+        ? 'dark'
+        : 'light'
+    }
+    return themePref === 'light' ? 'light' : 'dark'
+  })
 
   const [tabs, setTabs] = useSharedJSON(
     WORKSPACE_TABS_KEY,
@@ -939,20 +963,35 @@ export default function App() {
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const systemTheme = () => (media.matches ? 'dark' : 'light')
     const apply = () => {
-      const resolved =
-        themePref === 'system' ? (media.matches ? 'dark' : 'light') : themePref
+      const resolved = themePref === 'system' ? systemTheme() : themePref
       setResolvedTheme(resolved)
       document.documentElement.dataset.theme = resolved
     }
     apply()
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [themePref])
+    // 检测到系统主题变化时，无论用户之前是否手动切换过，都重新跟随系统。
+    // 之后用户仍可再次点击按钮手动切换深浅。
+    const onChange = () => {
+      const resolved = systemTheme()
+      setThemePref('system')
+      setResolvedTheme(resolved)
+      document.documentElement.dataset.theme = resolved
+    }
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [themePref, setThemePref])
 
-  const onToggleTheme = useCallback(
-    (event) => {
-      const next = resolvedTheme === 'dark' ? 'light' : 'dark'
+  const applyThemeMode = useCallback(
+    (mode, event) => {
+      const media = window.matchMedia('(prefers-color-scheme: dark)')
+      const nextResolved =
+        mode === 'system' ? (media.matches ? 'dark' : 'light') : mode
+      // 目标外观与当前一致时只切换选中状态，不播放过渡
+      if (nextResolved === resolvedTheme) {
+        setThemePref(mode)
+        return
+      }
       const reduceMotion = window.matchMedia(
         '(prefers-reduced-motion: reduce)'
       ).matches
@@ -960,7 +999,7 @@ export default function App() {
         reduceMotion ||
         typeof document.startViewTransition !== 'function'
       ) {
-        setThemePref(next)
+        setThemePref(mode)
         return
       }
       if (themeTransitionRef.current) return
@@ -975,7 +1014,7 @@ export default function App() {
       const root = document.documentElement
       // 浅色 -> 深色：深色从按钮向外扩散
       // 深色 -> 浅色：旧深色向按钮收拢，露出浅色
-      const contract = next === 'light'
+      const contract = nextResolved === 'light'
       const startRadius = contract
         ? 0
         : Math.max(12, rect ? rect.width / 2 : 16)
@@ -997,10 +1036,10 @@ export default function App() {
       themeTransitionRef.current = true
       try {
         const transition = document.startViewTransition(() => {
-          root.dataset.theme = next
+          root.dataset.theme = nextResolved
           flushSync(() => {
-            setThemePref(next)
-            setResolvedTheme(next)
+            setThemePref(mode)
+            setResolvedTheme(nextResolved)
           })
         })
         transition.finished.finally(() => {
@@ -1008,10 +1047,26 @@ export default function App() {
         })
       } catch {
         themeTransitionRef.current = false
-        setThemePref(next)
+        setThemePref(mode)
       }
     },
     [resolvedTheme, setThemePref]
+  )
+
+  const onToggleTheme = useCallback(
+    (event) => {
+      // 保留外部组件的切换入口：始终在深浅之间切换
+      applyThemeMode(resolvedTheme === 'dark' ? 'light' : 'dark', event)
+    },
+    [applyThemeMode, resolvedTheme]
+  )
+
+  // 单个按钮循环：跟随系统 -> 浅色 -> 深色 -> 跟随系统
+  const onCycleTheme = useCallback(
+    (event) => {
+      applyThemeMode(nextThemeMode(themePref), event)
+    },
+    [applyThemeMode, themePref]
   )
 
   useEffect(() => {
@@ -2454,6 +2509,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <FastTooltip />
       <LiquidGlassFilter />
       <div className="tab-strip">
         <button
@@ -2804,7 +2860,7 @@ export default function App() {
           <div className="tab-layout-wrap" ref={layoutMenuRef}>
             <button
               type="button"
-              className={`tab-action tab-layout ${
+              className={`tab-action is-icon tab-layout ${
                 layoutMenuOpen ? 'is-active' : ''
               }`}
               onClick={() => setLayoutMenuOpen((prev) => !prev)}
@@ -2815,7 +2871,6 @@ export default function App() {
               aria-expanded={layoutMenuOpen}
             >
               <Icon name="layout" size={15} />
-              <span>布局</span>
             </button>
             {layoutMenuOpen ? (
               <div className="split-layout-menu" role="menu" aria-label="分屏布局">
@@ -2853,13 +2908,12 @@ export default function App() {
           {splitPaneCount > 1 ? (
             <button
               type="button"
-              className="tab-action tab-exit-split"
+              className="tab-action is-icon tab-exit-split"
               onClick={closeSplit}
               title="退出分屏"
               aria-label="退出分屏"
             >
-              <Icon name="close" size={14} />
-              <span>退出分屏</span>
+              <Icon name="exit-split" size={15} />
             </button>
           ) : null}
           <button
@@ -2904,13 +2958,13 @@ export default function App() {
           <button
             type="button"
             className="tab-action is-icon tab-theme-toggle"
-            onClick={onToggleTheme}
-            title={
-              resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'
-            }
-            aria-label="切换主题"
+            onClick={onCycleTheme}
+            title={THEME_MODE_LABEL[themePref] || '跟随系统'}
+            aria-label={`切换主题（${
+              THEME_MODE_LABEL[themePref] || '跟随系统'
+            }）`}
           >
-            <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} size={16} />
+            <Icon name={themeIconName(themePref)} size={15} />
           </button>
         </div>
       </div>
@@ -3436,7 +3490,7 @@ export default function App() {
                   className="tab-color-input"
                   value={
                     tabStyleDraft.background ||
-                    (resolvedTheme === 'dark' ? '#0b1624' : '#ffffff')
+                    (resolvedTheme === 'dark' ? '#0c0c0d' : '#ffffff')
                   }
                   onChange={(event) =>
                     setTabStyleDraft((prev) => ({
