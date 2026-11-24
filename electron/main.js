@@ -7,6 +7,13 @@ const fsSync = require('fs')
 const { spawn, execFile, execFileSync } = require('child_process')
 const { pipeline } = require('stream/promises')
 
+let autoUpdater = null
+let CancellationToken = null
+if (process.platform === 'win32') {
+  ;({ autoUpdater } = require('electron-updater'))
+  ;({ CancellationToken } = require('builder-util-runtime'))
+}
+
 const { EventEmitter } = require('events')
 const { SerialPort } = require('serialport')
 const iconv = require('iconv-lite')
@@ -4138,11 +4145,227 @@ async function installUpdateFile(filePath) {
   return message ? { ok: false, error: message } : { ok: true }
 }
 
-ipcMain.handle('update:check', async (_event, { force = false } = {}) =>
-  fetchLatestRelease(Boolean(force))
-)
+// ---------- Windows electron-updater ----------
+const WIN_UPDATE_FEED_URL =
+  'https://shenzhen-img.oss-cn-shenzhen.aliyuncs.com/zhangfan/Weft-Terminal/Win'
+
+let winUpdaterReady = false
+let winUpdateSender = null
+let winDownloadedFile = ''
+let winDownloadToken = null
+let winUpdateAssetName = ''
+let winUpdateInfo = null
+
+function normalizeUpdateNotes(notes) {
+  if (!notes) return ''
+  if (typeof notes === 'string') return notes
+  if (Array.isArray(notes)) {
+    return notes
+      .map((item) => {
+        if (typeof item === 'string') return item
+        const version = item?.version ? `## ${item.version}\n` : ''
+        return `${version}${item?.note || ''}`
+      })
+      .join('\n\n')
+  }
+  return ''
+}
+
+function initWindowsUpdater() {
+  if (process.platform !== 'win32' || !autoUpdater || winUpdaterReady) return
+  winUpdaterReady = true
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
+  autoUpdater.allowPrerelease = false
+  if (!app.isPackaged) autoUpdater.forceDevUpdateConfig = true
+  autoUpdater.setFeedURL({ provider: 'generic', url: WIN_UPDATE_FEED_URL })
+  autoUpdater.logger = {
+    info: (...args) => console.log('[updater]', ...args),
+    warn: (...args) => console.warn('[updater]', ...args),
+    error: (...args) => console.error('[updater]', ...args),
+    debug: () => {}
+  }
+  autoUpdater.on('download-progress', (progress) => {
+    if (!winUpdateSender || winUpdateSender.isDestroyed()) return
+    winUpdateSender.send('update:progress', {
+      received: progress.transferred,
+      total: progress.total,
+      percent: progress.percent,
+      fileName: winUpdateAssetName,
+      done: false
+    })
+  })
+  autoUpdater.on('error', (error) => {
+    console.error('[updater] error:', error?.message || error)
+  })
+}
+
+if (process.platform === 'win32') initWindowsUpdater()
+
+function winUpdatePayload(info, available) {
+  const files = Array.isArray(info?.files) ? info.files : []
+  const file =
+    files.find((item) => /\.exe$/i.test(item?.url || '')) ||
+    files[0] ||
+    null
+  let name = ''
+  if (file?.url) {
+    try {
+      name = decodeURIComponent(path.basename(file.url))
+    } catch {
+      name = path.basename(file.url)
+    }
+  }
+  winUpdateAssetName = name
+  if (info) winUpdateInfo = info
+  const latestVersion = String(info?.version || app.getVersion())
+    .trim()
+    .replace(/^v/i, '')
+  return {
+    ok: true,
+    available: Boolean(available),
+    currentVersion: app.getVersion(),
+    latestVersion,
+    tag: `v${latestVersion}`,
+    releaseName: info?.releaseName || `Weft Terminal ${latestVersion}`,
+    notes: normalizeUpdateNotes(info?.releaseNotes),
+    publishedAt: info?.releaseDate || '',
+    releaseUrl: `https://github.com/${UPDATE_OWNER}/${UPDATE_REPO}/releases/tag/v${latestVersion}`,
+    asset: file
+      ? {
+          name,
+          url: file.url,
+          size: Number(file.size) || 0,
+          sha512: file.sha512 || '',
+          contentType: ''
+        }
+      : null,
+    checkedAt: Date.now(),
+    source: 'electron-updater'
+  }
+}
+
+function winCheckForUpdates() {
+  initWindowsUpdater()
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let timer = null
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+      autoUpdater.removeListener('update-available', onAvailable)
+      autoUpdater.removeListener('update-not-available', onNotAvailable)
+      autoUpdater.removeListener('error', onError)
+    }
+    const finish = (fn, value) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      fn(value)
+    }
+    const onAvailable = (info) =>
+      finish(resolve, winUpdatePayload(info, true))
+    const onNotAvailable = (info) =>
+      finish(resolve, winUpdatePayload(info, false))
+    const onError = (error) =>
+      finish(
+        reject,
+        error instanceof Error ? error : new Error(String(error))
+      )
+    autoUpdater.on('update-available', onAvailable)
+    autoUpdater.on('update-not-available', onNotAvailable)
+    autoUpdater.on('error', onError)
+    timer = setTimeout(
+      () => finish(reject, new Error('检查更新超时')),
+      20000
+    )
+    autoUpdater.checkForUpdates().catch(onError)
+  })
+}
+
+async function winDownloadUpdate(event) {
+  initWindowsUpdater()
+  winUpdateSender = event.sender
+  winDownloadToken = CancellationToken ? new CancellationToken() : null
+  try {
+    const files = await autoUpdater.downloadUpdate(winDownloadToken || undefined)
+    const filePath = Array.isArray(files) ? files[0] : ''
+    if (!filePath || !fsSync.existsSync(filePath)) {
+      return { ok: false, error: '下载完成但未找到安装包' }
+    }
+    winDownloadedFile = filePath
+    return {
+      ok: true,
+      filePath,
+      fileName: path.basename(filePath),
+      size: fsSync.statSync(filePath).size
+    }
+  } catch (error) {
+    const canceled =
+      error?.name === 'CancellationError' ||
+      /cancel/i.test(error?.message || '')
+    return {
+      ok: false,
+      canceled,
+      error: canceled ? '' : error?.message || String(error)
+    }
+  } finally {
+    winDownloadToken = null
+  }
+}
+
+function winInstallUpdate() {
+  initWindowsUpdater()
+  try {
+    autoUpdater.quitAndInstall(false, true)
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) }
+  }
+}
+
+function winCancelUpdate() {
+  try {
+    winDownloadToken?.cancel()
+  } catch {
+    // 忽略
+  }
+  return { ok: true }
+}
+
+async function winOpenInstaller() {
+  if (winDownloadedFile && fsSync.existsSync(winDownloadedFile)) {
+    const message = await shell.openPath(winDownloadedFile)
+    return message ? { ok: false, error: message } : { ok: true }
+  }
+  return { ok: false, error: '安装包不存在，请重新下载' }
+}
+
+function winShowInstaller() {
+  if (winDownloadedFile && fsSync.existsSync(winDownloadedFile)) {
+    shell.showItemInFolder(winDownloadedFile)
+    return { ok: true }
+  }
+  return { ok: false, error: '安装包不存在，请重新下载' }
+}
+
+async function winOpenRelease() {
+  const version = String(winUpdateInfo?.version || '').trim()
+  const url = version
+    ? `https://github.com/${UPDATE_OWNER}/${UPDATE_REPO}/releases/tag/v${version.replace(/^v/i, '')}`
+    : `https://github.com/${UPDATE_OWNER}/${UPDATE_REPO}/releases`
+  await shell.openExternal(url)
+  return { ok: true }
+}
+
+ipcMain.handle('update:check', async (_event, { force = false } = {}) => {
+  if (process.platform === 'win32') return winCheckForUpdates()
+  return fetchLatestRelease(Boolean(force))
+})
 
 ipcMain.handle('update:download', async (event) => {
+  if (process.platform === 'win32') {
+    return winDownloadUpdate(event)
+  }
   try {
     let payload = updateReleaseCache.payload
     if (!payload?.available || !payload?.asset) {
@@ -4164,6 +4387,9 @@ ipcMain.handle('update:download', async (event) => {
 })
 
 ipcMain.handle('update:install', async () => {
+  if (process.platform === 'win32') {
+    return winInstallUpdate()
+  }
   if (!lastUpdateFilePath || !fsSync.existsSync(lastUpdateFilePath)) {
     return { ok: false, error: '安装包不存在，请重新下载' }
   }
@@ -4175,6 +4401,9 @@ ipcMain.handle('update:install', async () => {
 })
 
 ipcMain.handle('update:cancel', () => {
+  if (process.platform === 'win32') {
+    return winCancelUpdate()
+  }
   updateDownloadCanceled = true
   updateDownloadRequest?.abort()
   updateDownloadWriter?.destroy(new Error('canceled'))
@@ -4182,6 +4411,9 @@ ipcMain.handle('update:cancel', () => {
 })
 
 ipcMain.handle('update:open', async () => {
+  if (process.platform === 'win32') {
+    return winOpenInstaller()
+  }
   if (!lastUpdateFilePath || !fsSync.existsSync(lastUpdateFilePath)) {
     return { ok: false, error: '安装包不存在，请重新下载' }
   }
@@ -4190,6 +4422,9 @@ ipcMain.handle('update:open', async () => {
 })
 
 ipcMain.handle('update:show', () => {
+  if (process.platform === 'win32') {
+    return winShowInstaller()
+  }
   if (lastUpdateFilePath && fsSync.existsSync(lastUpdateFilePath)) {
     shell.showItemInFolder(lastUpdateFilePath)
     return { ok: true }
@@ -4198,6 +4433,9 @@ ipcMain.handle('update:show', () => {
 })
 
 ipcMain.handle('update:release', async () => {
+  if (process.platform === 'win32') {
+    return winOpenRelease()
+  }
   const url = updateReleaseCache.payload?.releaseUrl
   if (!url || !/^https:\/\/github\.com\//i.test(url)) {
     return { ok: false, error: '发布页地址不可用' }
