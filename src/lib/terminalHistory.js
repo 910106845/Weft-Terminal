@@ -29,8 +29,15 @@ export function terminalHistoryKey ({ transport, shellId, host }) {
 export function loadTerminalHistory (key) {
   const list = readAll()[key]
   if (!Array.isArray(list)) return []
+  const seen = new Set()
   return list
     .filter((item) => typeof item === 'string' && item.trim())
+    .filter((item) => {
+      const text = item.trim()
+      if (seen.has(text)) return false
+      seen.add(text)
+      return true
+    })
     .slice(0, HISTORY_LIMIT)
 }
 

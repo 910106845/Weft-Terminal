@@ -1939,13 +1939,13 @@ export default function TerminalPage({
         closeSuggestions()
         return
       }
-      const lower = text.toLowerCase()
       const seen = new Set([text])
       const items = []
       const push = (value) => {
         const command = String(value || '').trim()
         if (!command || items.length >= 8 || seen.has(command)) return
-        if (!command.toLowerCase().startsWith(lower)) return
+        // 补全按大小写精确匹配：输入 Git 不再补出 git
+        if (!command.startsWith(text)) return
         seen.add(command)
         items.push(command)
       }
@@ -2002,7 +2002,7 @@ export default function TerminalPage({
         closeSuggestions()
         return
       }
-      if (!command.toLowerCase().startsWith(line.text.toLowerCase())) {
+      if (!command.startsWith(line.text)) {
         closeSuggestions()
         return
       }
