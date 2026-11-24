@@ -92,7 +92,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Weft Terminal",
-      "uninstallDisplayName": "Weft Terminal"
+      "uninstallDisplayName": "Weft Terminal",
+      "include": "build/installer.nsh"
     }
   },
   "repository": {
