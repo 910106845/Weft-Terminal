@@ -310,6 +310,7 @@ button {
   align-items: center;
   gap: 4px;
   overflow-x: auto;
+  overflow-anchor: none;
   padding: 1px;
 }
 
@@ -429,28 +430,7 @@ button {
 }
 
 .tab-card.is-dragging {
-  opacity: 0.45;
-}
-
-.tab-card.drop-before::after,
-.tab-card.drop-after::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
-  pointer-events: none;
-}
-
-.tab-card.drop-before::after {
-  left: -4px;
-}
-
-.tab-card.drop-after::after {
-  right: -4px;
+  opacity: 0;
 }
 
 .tab-status {

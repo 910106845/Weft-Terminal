@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import HomePage from './components/HomePage'
 import { LiquidGlassFilter } from './components/LiquidGlass'
@@ -714,7 +714,6 @@ export default function App() {
     accent: ''
   })
   const [dragTabId, setDragTabId] = useState(null)
-  const [tabDropTarget, setTabDropTarget] = useState(null)
   const [splitPreview, setSplitPreview] = useState(null)
   const [sshCredentials, setSshCredentials] = useState({})
   const [sshDialog, setSshDialog] = useState(null)
@@ -728,12 +727,16 @@ export default function App() {
   const updateDownloadingRef = useRef(false)
   const [appToast, setAppToast] = useState(null)
   const tabCardsRef = useRef(null)
+  const tabPositionsRef = useRef(new Map())
+  const dragTabIdRef = useRef(null)
   const appToastTimerRef = useRef(null)
   const addMenuWrapRef = useRef(null)
   const tabListWrapRef = useRef(null)
   const folderBtnRef = useRef(null)
   const splitRef = useRef(null)
   const themeTransitionRef = useRef(false)
+
+  dragTabIdRef.current = dragTabId
 
   const showAppToast = useCallback((message, kind = 'success') => {
     setAppToast({ message, kind })
@@ -1496,22 +1499,6 @@ export default function App() {
   const addTerminalTab = useCallback(() => addTab('terminal'), [addTab])
   const addSerialTab = useCallback(() => addTab('serial'), [addTab])
 
-  const reorderTabs = useCallback((fromId, toId, position = 'before') => {
-    setTabs((prev) => {
-      const fromIndex = prev.findIndex((tab) => tab.id === fromId)
-      const targetIndex = prev.findIndex((tab) => tab.id === toId)
-      if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) {
-        return prev
-      }
-      const next = prev.slice()
-      const [moved] = next.splice(fromIndex, 1)
-      const insertIndex = next.findIndex((tab) => tab.id === toId)
-      if (insertIndex < 0) return prev
-      next.splice(position === 'after' ? insertIndex + 1 : insertIndex, 0, moved)
-      return next
-    })
-  }, [])
-
   const closeTab = useCallback(
     (id) => {
       const next = tabs.filter((tab) => tab.id !== id)
@@ -1746,6 +1733,53 @@ export default function App() {
     const frame = requestAnimationFrame(() => scrollTabIntoView(activeTabId))
     return () => cancelAnimationFrame(frame)
   }, [activeTabId, scrollTabIntoView])
+
+  // 拖动排序：悬停到另一个标签时立即重排，其余标签用 FLIP 平滑让位
+  const moveTabLive = useCallback(
+    (fromId, toId, after) => {
+      setTabs((prev) => {
+        const from = prev.findIndex((tab) => tab.id === fromId)
+        const to = prev.findIndex((tab) => tab.id === toId)
+        if (from < 0 || to < 0 || from === to) return prev
+        // 只在拖动方向上移动，避免在中线附近来回抖动
+        if (after ? from > to : from < to) return prev
+        const next = prev.slice()
+        const [moved] = next.splice(from, 1)
+        const target = next.findIndex((tab) => tab.id === toId)
+        if (target < 0) return prev
+        next.splice(after ? target + 1 : target, 0, moved)
+        return next
+      })
+    },
+    [setTabs]
+  )
+
+  useLayoutEffect(() => {
+    const container = tabCardsRef.current
+    if (!container) return
+    const previous = tabPositionsRef.current
+    const next = new Map()
+    const draggingId = dragTabIdRef.current
+    container.querySelectorAll('[data-tab-id]').forEach((el) => {
+      const id = el.getAttribute('data-tab-id')
+      const left = el.offsetLeft
+      next.set(id, left)
+      // 被拖动的标签跟着指针走，不参与让位动画
+      if (id === draggingId) return
+      const before = previous.get(id)
+      if (before == null) return
+      const delta = before - left
+      if (Math.abs(delta) < 1) return
+      el.animate(
+        [
+          { transform: `translateX(${delta}px)` },
+          { transform: 'translateX(0)' }
+        ],
+        { duration: 165, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
+      )
+    })
+    tabPositionsRef.current = next
+  }, [tabs])
 
   const startRename = useCallback((tab, index) => {
     setRenameTabId(tab.id)
@@ -2175,7 +2209,6 @@ export default function App() {
       const tabId = dragTabId || event.dataTransfer.getData('text/plain')
       setSplitPreview(null)
       setDragTabId(null)
-      setTabDropTarget(null)
       if (!preview || !tabId) return
       event.preventDefault()
       const tab = tabs.find((item) => item.id === tabId)
@@ -2366,7 +2399,6 @@ export default function App() {
   const handlePaneDragEnd = useCallback(() => {
     setDragTabId(null)
     setSplitPreview(null)
-    setTabDropTarget(null)
   }, [])
 
   const renderTabPage = (tab, active, visible) => {
@@ -2733,6 +2765,20 @@ export default function App() {
           role="tablist"
           aria-label="会话页面"
           ref={tabCardsRef}
+          onDragOver={(event) => {
+            if (!dragTabId) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'move'
+            // 拖到两端时自动横向滚动，和 opencode 的排序手感一致
+            const el = event.currentTarget
+            const rect = el.getBoundingClientRect()
+            const edge = 48
+            if (event.clientX < rect.left + edge) {
+              el.scrollLeft -= 14
+            } else if (event.clientX > rect.right - edge) {
+              el.scrollLeft += 14
+            }
+          }}
         >
           {tabs.map((tab, index) => (
             <div
@@ -2748,10 +2794,6 @@ export default function App() {
                   : ''
               } ${isRemoteTab(tab) ? 'is-remote' : ''} ${
                 dragTabId === tab.id ? 'is-dragging' : ''
-              } ${
-                tabDropTarget?.id === tab.id
-                  ? `drop-${tabDropTarget.position}`
-                  : ''
               }`}
               style={tabCardStyle(tab)}
               draggable
@@ -2762,43 +2804,41 @@ export default function App() {
                   return
                 }
                 setDragTabId(tab.id)
-                setTabDropTarget(null)
                 event.dataTransfer.effectAllowed = 'move'
                 event.dataTransfer.setData('text/plain', tab.id)
+                // 用完整不透明的卡片快照作为拖动影像，源卡片随后淡出
+                const card = event.currentTarget
+                const rect = card.getBoundingClientRect()
+                const ghost = card.cloneNode(true)
+                ghost.style.cssText += `position:fixed;top:-9999px;left:-9999px;width:${rect.width}px;height:${rect.height}px;opacity:0.98;pointer-events:none;filter:drop-shadow(0 10px 18px rgba(8,20,38,0.35));`
+                document.body.appendChild(ghost)
+                event.dataTransfer.setDragImage(
+                  ghost,
+                  event.clientX - rect.left,
+                  event.clientY - rect.top
+                )
+                window.setTimeout(() => ghost.remove(), 0)
               }}
               onDragEnd={() => {
                 setDragTabId(null)
-                setTabDropTarget(null)
                 setSplitPreview(null)
               }}
               onDragOver={(event) => {
-                if (!dragTabId || dragTabId === tab.id) return
+                if (!dragTabId) return
                 event.preventDefault()
                 event.dataTransfer.dropEffect = 'move'
+                if (dragTabId === tab.id) return
                 const rect = event.currentTarget.getBoundingClientRect()
-                const position =
+                moveTabLive(
+                  dragTabId,
+                  tab.id,
                   event.clientX > rect.left + rect.width / 2
-                    ? 'after'
-                    : 'before'
-                if (
-                  tabDropTarget?.id !== tab.id ||
-                  tabDropTarget?.position !== position
-                ) {
-                  setTabDropTarget({ id: tab.id, position })
-                }
+                )
               }}
               onDrop={(event) => {
                 event.preventDefault()
-                if (dragTabId && dragTabId !== tab.id) {
-                  const rect = event.currentTarget.getBoundingClientRect()
-                  const position =
-                    event.clientX > rect.left + rect.width / 2
-                      ? 'after'
-                      : 'before'
-                  reorderTabs(dragTabId, tab.id, position)
-                }
                 setDragTabId(null)
-                setTabDropTarget(null)
+                setSplitPreview(null)
               }}
               onContextMenu={(event) => {
                 event.preventDefault()
