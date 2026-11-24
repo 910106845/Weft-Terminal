@@ -57,6 +57,30 @@ if (process.env.SERIALDEBUG_USER_DATA) {
 }
 app.setName(APP_DISPLAY_NAME)
 
+function cleanupStaleAppBackups() {
+  try {
+    const exePath = app.getPath('exe')
+    const bundlePath = path.resolve(exePath, '../../..')
+    if (!bundlePath.endsWith('.app')) return
+    const parent = path.dirname(bundlePath)
+    const base = path.basename(bundlePath)
+    for (const suffix of ['.backup', '.new']) {
+      try {
+        fsSync.rmSync(path.join(parent, `.${base}${suffix}`), {
+          recursive: true,
+          force: true
+        })
+      } catch {
+        // 忽略权限或文件占用问题
+      }
+    }
+  } catch {
+    // 忽略
+  }
+}
+
+cleanupStaleAppBackups()
+
 const windows = new Set()
 const sessions = new Map()
 // 记录本应用内已经占用的串口路径，避免串口工具和虚拟串口页重复打开同一端
@@ -4020,6 +4044,12 @@ async function installMacUpdate(dmgPath) {
     try {
       await fs.rename(bundlePath, backupPath)
       await fs.rename(tempPath, bundlePath)
+      try {
+        // 升级成功后删除旧版本备份，避免 Spotlight / Finder 里出现两个应用
+        await fs.rm(backupPath, { recursive: true, force: true })
+      } catch {
+        // 备份清理失败不影响升级
+      }
     } catch {
       const quote = (value) =>
         `'${String(value).replace(/'/g, `'\\''`)}'`
@@ -4035,6 +4065,7 @@ xattr -dr com.apple.quarantine ${quote(tempPath)} || true
 rm -rf ${quote(backupPath)}
 mv ${quote(bundlePath)} ${quote(backupPath)}
 mv ${quote(tempPath)} ${quote(bundlePath)}
+rm -rf ${quote(backupPath)}
 `
       await fs.writeFile(scriptPath, script, { mode: 0o755 })
       try {

@@ -2875,7 +2875,7 @@ export default function App() {
               updateStatus === 'downloading' ||
               updateStatus === 'installing'
             }
-            title={
+            data-tooltip={
               updateStatus === 'checking'
                 ? '正在检查更新…'
                 : updateStatus === 'downloading'

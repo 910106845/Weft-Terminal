@@ -526,6 +526,37 @@ button {
   position: relative;
 }
 
+/* 自定义悬浮提示：原生 title 延迟太长，改成即时提示 */
+.update-trigger[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 300;
+  width: max-content;
+  max-width: 330px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.update-trigger[data-tooltip]:hover::after,
+.update-trigger[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .update-trigger.has-update {
   color: var(--accent);
   background: var(--accent-soft);

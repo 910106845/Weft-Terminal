@@ -1,6 +1,6 @@
 {
   "name": "weft-terminal",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Weft Terminal — 串口 · 终端 · SSH",
   "main": "electron/main.js",
   "author": "Weft",
@@ -94,7 +94,8 @@
       "shortcutName": "Weft Terminal",
       "uninstallDisplayName": "Weft Terminal",
       "include": "build/installer.nsh"
-    }
+    },
+    "afterAllArtifactBuild": "scripts/after-all-artifact-build.cjs"
   },
   "repository": {
     "type": "git",
