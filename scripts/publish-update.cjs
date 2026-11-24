@@ -278,6 +278,11 @@ async function main () {
     } else {
       await client.multipartUpload(upload.key, upload.local, {
         headers: { 'x-oss-object-acl': 'public-read' },
+        // 大文件用更大的分片和更长的超时，避免单个分片 60s 响应超时
+        timeout: 300000,
+        partSize: 5 * 1024 * 1024,
+        parallel: 2,
+        retryMax: 5,
         progress: (percent) => {
           process.stdout.write(`\r  ${Math.round(percent * 100)}%`)
         }
