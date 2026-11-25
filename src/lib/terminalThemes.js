@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 // 终端配色 / 字体预设。
 // 配色取自各主题官方仓库与 iTerm2-Color-Schemes 的终端移植版本；
 // 只保存 themeId 和用户微调后的显示参数。
@@ -552,9 +554,195 @@ export const TERMINAL_THEME_IDS = new Set(
 )
 
 const THEME_MAP = new Map(TERMINAL_THEMES.map((theme) => [theme.id, theme]))
+const CUSTOM_THEMES_KEY = 'serialdebug.terminal.customThemes'
+const CUSTOM_THEMES_LIMIT = 60
+const CURSOR_STYLES = new Set(['bar', 'block', 'underline'])
+const ANSI_KEYS = [
+  'black',
+  'red',
+  'green',
+  'yellow',
+  'blue',
+  'magenta',
+  'cyan',
+  'white',
+  'brightBlack',
+  'brightRed',
+  'brightGreen',
+  'brightYellow',
+  'brightBlue',
+  'brightMagenta',
+  'brightCyan',
+  'brightWhite'
+]
+
+function clampNumber (value, min, max, fallback) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return fallback
+  return Math.min(max, Math.max(min, number))
+}
+
+function sanitizeCustomTheme (raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const source = raw.colors
+  if (
+    !source ||
+    typeof source.background !== 'string' ||
+    typeof source.foreground !== 'string'
+  ) {
+    return null
+  }
+  const colors = {
+    background: source.background,
+    foreground: source.foreground,
+    cursor:
+      typeof source.cursor === 'string' ? source.cursor : source.foreground,
+    cursorAccent:
+      typeof source.cursorAccent === 'string'
+        ? source.cursorAccent
+        : source.background,
+    selectionBackground:
+      typeof source.selectionBackground === 'string'
+        ? source.selectionBackground
+        : 'rgba(128, 128, 128, 0.3)'
+  }
+  for (const key of ANSI_KEYS) {
+    colors[key] =
+      typeof source[key] === 'string' ? source[key] : source.foreground
+  }
+  const display = raw.display && typeof raw.display === 'object' ? raw.display : {}
+  return {
+    id: '',
+    label:
+      typeof raw.label === 'string' && raw.label.trim()
+        ? raw.label.trim().slice(0, 60)
+        : '导入主题',
+    mode: raw.mode === 'light' ? 'light' : 'dark',
+    custom: true,
+    colors,
+    display: {
+      fontFamily:
+        typeof display.fontFamily === 'string' ? display.fontFamily : 'system',
+      fontSize: clampNumber(display.fontSize, 10, 22, 13),
+      lineHeight: clampNumber(display.lineHeight, 1.2, 1.8, 1.45),
+      cursorStyle: CURSOR_STYLES.has(display.cursorStyle)
+        ? display.cursorStyle
+        : 'bar'
+    }
+  }
+}
+
+function loadCustomThemes () {
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_THEMES_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((item) => {
+        const theme = sanitizeCustomTheme(item)
+        if (!theme) return null
+        theme.id =
+          typeof item.id === 'string' && item.id.startsWith('custom-')
+            ? item.id
+            : `custom-${Math.random().toString(36).slice(2, 10)}`
+        return theme
+      })
+      .filter(Boolean)
+      .slice(-CUSTOM_THEMES_LIMIT)
+  } catch {
+    return []
+  }
+}
+
+let customThemes = loadCustomThemes()
+const themeListeners = new Set()
+
+function persistCustomThemes () {
+  try {
+    window.localStorage.setItem(
+      CUSTOM_THEMES_KEY,
+      JSON.stringify(customThemes)
+    )
+  } catch {
+    // 存储已满时忽略，本次运行仍然可用
+  }
+}
+
+function notifyThemeListeners () {
+  themeListeners.forEach((listener) => listener())
+}
+
+export function getCustomTerminalThemes () {
+  return customThemes.slice()
+}
+
+export function addCustomTerminalThemes (items) {
+  if (!Array.isArray(items) || items.length === 0) return []
+  const added = []
+  const labels = new Set(
+    [...TERMINAL_THEMES, ...customThemes].map((theme) => theme.label)
+  )
+  for (const item of items) {
+    const theme = sanitizeCustomTheme(item)
+    if (!theme) continue
+    if (labels.has(theme.label)) {
+      const base = `${theme.label}（导入）`
+      let candidate = base
+      let suffix = 2
+      while (labels.has(candidate)) {
+        candidate = `${base} ${suffix}`
+        suffix += 1
+      }
+      theme.label = candidate
+    }
+    labels.add(theme.label)
+    theme.id = `custom-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 7)}`
+    customThemes = [...customThemes, theme].slice(-CUSTOM_THEMES_LIMIT)
+    added.push(theme)
+  }
+  if (added.length) {
+    persistCustomThemes()
+    notifyThemeListeners()
+  }
+  return added
+}
+
+export function removeCustomTerminalTheme (themeId) {
+  if (typeof themeId !== 'string' || !themeId.startsWith('custom-')) return false
+  const next = customThemes.filter((theme) => theme.id !== themeId)
+  if (next.length === customThemes.length) return false
+  customThemes = next
+  persistCustomThemes()
+  notifyThemeListeners()
+  return true
+}
+
+export function useTerminalThemes () {
+  const [themes, setThemes] = useState(() => [
+    ...TERMINAL_THEMES,
+    ...customThemes
+  ])
+  useEffect(() => {
+    const update = () => setThemes([...TERMINAL_THEMES, ...customThemes])
+    themeListeners.add(update)
+    return () => themeListeners.delete(update)
+  }, [])
+  return themes
+}
+
+function findCustomTheme (themeId) {
+  return customThemes.find((theme) => theme.id === themeId) || null
+}
+
+export function isKnownTerminalTheme (themeId) {
+  return THEME_MAP.has(themeId) || Boolean(findCustomTheme(themeId))
+}
 
 export function getTerminalThemeDefinition(themeId) {
-  return THEME_MAP.get(themeId) || TERMINAL_THEMES[0]
+  return THEME_MAP.get(themeId) || findCustomTheme(themeId) || TERMINAL_THEMES[0]
 }
 
 export function getTerminalTheme(themeId, resolvedTheme) {

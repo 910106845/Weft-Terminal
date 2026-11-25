@@ -6245,6 +6245,74 @@ button:focus-visible,
   width: auto;
 }
 
+.terminal-theme-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-theme-head .terminal-display-label {
+  width: auto;
+}
+
+.terminal-theme-import {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.terminal-theme-import:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.terminal-theme-cell {
+  position: relative;
+  min-width: 0;
+}
+
+.terminal-theme-cell .terminal-theme-chip {
+  width: 100%;
+}
+
+.terminal-theme-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.terminal-theme-cell:hover .terminal-theme-remove,
+.terminal-theme-remove:focus-visible {
+  opacity: 1;
+}
+
+.terminal-theme-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .terminal-theme-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -6254,6 +6322,7 @@ button:focus-visible,
 .terminal-theme-chip {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 5px;
   padding: 6px;
   border: 1px solid var(--border);
@@ -6277,6 +6346,7 @@ button:focus-visible,
 
 .terminal-theme-colors {
   display: flex;
+  width: 100%;
   height: 14px;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.1);
