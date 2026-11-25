@@ -1356,15 +1356,28 @@ export default function TerminalPage({
       }
 
       const key = event.key.toLowerCase()
-      const copyKey = isMac
-        ? event.metaKey && !event.ctrlKey
-        : event.ctrlKey && event.shiftKey
+      const selection = term.hasSelection() ? term.getSelection() : ''
+      // macOS 用 Cmd+C；Windows/Linux 用 Ctrl+C（有选中时）或 Ctrl+Shift+C
+      const copyCombo = isMac
+        ? event.metaKey && !event.ctrlKey && !event.altKey
+        : event.ctrlKey && !event.altKey
 
-      if (copyKey && key === 'c' && term.hasSelection()) {
-        event.preventDefault()
-        event.stopPropagation()
-        window.terminalAPI?.clipboard?.writeText(term.getSelection())
-        return false
+      if (copyCombo && key === 'c') {
+        if (selection) {
+          event.preventDefault()
+          event.stopPropagation()
+          window.terminalAPI?.clipboard?.writeText(selection)
+          // Windows/Linux 复制后取消选中，下一次 Ctrl+C 就能正常发送 SIGINT
+          if (!isMac) term.clearSelection()
+          return false
+        }
+        // 没有选中：Ctrl+Shift+C / Cmd+C 不发送字符；
+        // Windows/Linux 的普通 Ctrl+C 继续交给 Shell 发送 SIGINT
+        if (isMac || event.shiftKey) {
+          event.preventDefault()
+          return false
+        }
+        return true
       }
 
       // macOS Cmd+V 交给系统 Edit > Paste 菜单处理。

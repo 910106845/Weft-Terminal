@@ -1012,8 +1012,10 @@ function buildApplicationMenu() {
         { role: 'redo' },
         { type: 'separator' },
         { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
+        // 不注册系统快捷键，让 Cmd+C / Cmd+V 先到达终端；
+        // 输入框的复制粘贴由 Chromium 自身处理，菜单点击仍然可用。
+        { role: 'copy', registerAccelerator: false },
+        { role: 'paste', registerAccelerator: false },
         { role: 'selectAll' }
       ]
     },
