@@ -1623,9 +1623,38 @@ export default function TerminalPage({
     resetTerminalSearch()
     clearLogDecorations()
     clearTimestampMarkers()
-    termRef.current?.clear()
-    termRef.current?.focus()
-  }, [clearLogDecorations, clearTimestampMarkers, resetTerminalSearch])
+    const term = termRef.current
+    if (!term) return
+
+    // Windows 的 ConPTY 自己维护屏幕缓冲。只清 xterm 的缓冲会让
+    // ConPTY 的光标仍停在旧行，下一次输出就会在中间留下大片空白。
+    // 因此优先让 Shell 自己清屏，终端随后收到标准清屏序列，双方保持同步。
+    const canWrite = status === 'running' && window.terminalAPI?.write
+    if (canWrite) {
+      if (transport === 'ssh') {
+        // readline / zsh / bash 的标准 ClearScreen
+        window.terminalAPI.write(sessionId, '\x0c')
+      } else if (shellInfo?.id === 'cmd') {
+        // cmd 不支持 Ctrl+L：先用 Esc 清掉当前输入行，再执行 cls
+        window.terminalAPI.write(sessionId, '\x1bcls\r')
+      } else {
+        // PowerShell（PSReadLine）和其他本地 Shell
+        window.terminalAPI.write(sessionId, '\x0c')
+      }
+    } else {
+      // 已断开时没有 Shell 可转发，退化为本地清屏
+      term.clear()
+    }
+    term.focus()
+  }, [
+    clearLogDecorations,
+    clearTimestampMarkers,
+    resetTerminalSearch,
+    sessionId,
+    shellInfo?.id,
+    status,
+    transport
+  ])
 
   const answerHostKey = useCallback(
     (accept) => {
