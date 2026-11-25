@@ -8,6 +8,7 @@ import Modal from './Modal'
 import Icon from './Icons'
 import GhostCursor from './GhostCursor'
 import BrandMark from './BrandMark'
+import { isLiteLevel, useEffectsLevel } from '../lib/effects'
 import PageTag from './PageTag'
 import StatusCapsule from './StatusCapsule'
 import GlassButton from './LiquidGlass'
@@ -129,6 +130,7 @@ function setByPath(source, path, value) {
 export default function SessionPage({
   sessionId,
   active,
+  visible = true,
   accent,
   statusAccent,
   tagAccent,
@@ -150,6 +152,7 @@ export default function SessionPage({
   paneTag,
   paneTagClass
 }) {
+  const effectsLevel = useEffectsLevel()
   const isMac = window.serialAPI?.platform === 'darwin'
 
   const settingsKey = `serialdebug.settings.${sessionId}`
@@ -244,6 +247,8 @@ export default function SessionPage({
     interval: 500
   })
   const rxDeltaRef = useRef(0)
+  const lineCountRef = useRef(0)
+  const visibleRef = useRef(visible)
   const toastTimerRef = useRef(null)
   const stageRef = useRef(null)
   const customBaudsRef = useRef(customBauds)
@@ -258,6 +263,8 @@ export default function SessionPage({
   customBaudsRef.current = customBauds
   favoritesRef.current = favorites
   activeRef.current = active
+  visibleRef.current = visible
+  lineCountRef.current = lines.length
 
   const showToast = useCallback((message, kind = 'error') => {
     setToast({ message, kind })
@@ -296,8 +303,19 @@ export default function SessionPage({
         if (next.length > MAX_LINES) next = next.slice(next.length - MAX_LINES)
         return next
       })
-    }, 40)
+      // 隐藏的标签页不需要实时刷新；行数多时也降低频率，避免重排上千行
+    }, !visibleRef.current
+      ? 900
+      : lineCountRef.current > 1500
+        ? 100
+        : 60)
   }, [])
+
+  // 切回隐藏标签页时立即补一次刷新，不用等 900ms 的隐藏节流
+  useEffect(() => {
+    if (!visible) return
+    if (queueRef.current.length || rxDeltaRef.current) scheduleFlush()
+  }, [visible, scheduleFlush])
 
   const pushLine = useCallback(
     (text, kind = 'rx', hex = false) => {
@@ -1444,7 +1462,7 @@ export default function SessionPage({
       }`}
     >
       <header className="topbar">
-        {active ? (
+        {active && !isLiteLevel(effectsLevel) ? (
           <GhostCursor
             className="topbar-ghost"
             theme={resolvedTheme}

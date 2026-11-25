@@ -694,6 +694,48 @@ button {
   padding: 0;
 }
 
+.effects-menu {
+  width: 212px;
+}
+
+.effects-menu button {
+  height: auto;
+  padding: 7px 8px;
+  align-items: flex-start;
+}
+
+.effects-menu .effects-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+
+.effects-menu button.is-active .effects-check {
+  color: var(--accent);
+}
+
+.effects-menu .effects-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.effects-menu .effects-copy strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.effects-menu .effects-copy small {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
 .tab-action {
   height: 32px;
   flex: none;
@@ -1187,6 +1229,25 @@ body.is-resizing-split-column * {
   background: var(--topbar-bg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+}
+
+/* 低特效模式：背景模糊很吃 GPU，改用不透明底色；同时关闭装饰性无限动画 */
+:root:is([data-effects='lite'], [data-effects='minimal']) .topbar {
+  background: var(--surface-2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root:is([data-effects='lite'], [data-effects='minimal']) .conn-pill.is-on .conn-dot,
+:root:is([data-effects='lite'], [data-effects='minimal']) .empty-wave-line {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conn-pill.is-on .conn-dot,
+  .empty-wave-line {
+    animation: none;
+  }
 }
 
 .brand {
@@ -2068,7 +2129,7 @@ kbd {
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 12px;
+  gap: 3px;
   padding: 2px 5px;
 }
 
@@ -2126,7 +2187,7 @@ body.is-resizing-col .col-resizer::before {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 3px;
   container-type: inline-size;
   container-name: stage;
 }
@@ -8135,7 +8196,7 @@ button:focus-visible,
   min-height: 0;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
-  gap: 16px;
+  gap: 3px;
 }
 
 .virtual-rail {
@@ -8159,7 +8220,7 @@ button:focus-visible,
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 3px;
 }
 
 /* 虚拟串口：左侧列表收起 */

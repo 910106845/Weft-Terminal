@@ -19,6 +19,7 @@ import {
   normalizeTerminalDisplay
 } from './lib/terminalDisplay'
 import { loadJSON, loadString, saveJSON, saveString } from './lib/format'
+import { EFFECT_LEVELS, setEffectsLevel, useEffectsLevel } from './lib/effects'
 import { useSharedJSON, useSharedString } from './hooks/useSharedState'
 
 const TABS_PREFIX = 'serialdebug.tabs.'
@@ -703,6 +704,9 @@ export default function App() {
   const [tabListOpen, setTabListOpen] = useState(false)
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
   const layoutMenuRef = useRef(null)
+  const [effectsMenuOpen, setEffectsMenuOpen] = useState(false)
+  const effectsMenuRef = useRef(null)
+  const effectsLevel = useEffectsLevel()
   const [folderPanelOpen, setFolderPanelOpen] = useState(false)
   const [folderDeleteTarget, setFolderDeleteTarget] = useState(null)
   const [addMenuAlign, setAddMenuAlign] = useState('left')
@@ -1445,6 +1449,24 @@ export default function App() {
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [layoutMenuOpen])
+
+  useEffect(() => {
+    if (!effectsMenuOpen) return undefined
+    const onPointerDown = (event) => {
+      if (!effectsMenuRef.current?.contains(event.target)) {
+        setEffectsMenuOpen(false)
+      }
+    }
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setEffectsMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [effectsMenuOpen])
 
   const updateTabMeta = useCallback((id, meta) => {
     setTabs((prev) => {
@@ -2489,6 +2511,7 @@ export default function App() {
         statusAccent={tabStatusAccent(tab, resolvedTheme)}
         tagAccent={tabTagAccent(tab)}
         active={active}
+        visible={visible}
         migrateLegacy={Boolean(tab.migrateLegacy)}
         favorites={favorites}
         setFavorites={setFavorites}
@@ -3006,6 +3029,57 @@ export default function App() {
           >
             <Icon name={themeIconName(themePref)} size={15} />
           </button>
+          <div className="tab-layout-wrap" ref={effectsMenuRef}>
+            <button
+              type="button"
+              className={`tab-action is-icon ${
+                effectsMenuOpen ? 'is-active' : ''
+              }`}
+              onClick={() => setEffectsMenuOpen((prev) => !prev)}
+              title={`性能模式：${
+                EFFECT_LEVELS.find((item) => item.id === effectsLevel)?.label ||
+                '完整效果'
+              }`}
+              aria-label="性能模式"
+              aria-haspopup="menu"
+              aria-expanded={effectsMenuOpen}
+            >
+              <Icon name="cpu" size={15} />
+            </button>
+            {effectsMenuOpen ? (
+              <div
+                className="split-layout-menu effects-menu"
+                role="menu"
+                aria-label="性能模式"
+              >
+                <div className="split-layout-menu-head">性能模式</div>
+                {EFFECT_LEVELS.map((level) => {
+                  const active = effectsLevel === level.id
+                  return (
+                    <button
+                      key={level.id}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={active}
+                      className={active ? 'is-active' : ''}
+                      onClick={() => {
+                        setEffectsLevel(level.id)
+                        setEffectsMenuOpen(false)
+                      }}
+                    >
+                      <span className="effects-check" aria-hidden="true">
+                        <Icon name={active ? 'check' : 'cpu'} size={13} />
+                      </span>
+                      <span className="effects-copy">
+                        <strong>{level.label}</strong>
+                        <small>{level.desc}</small>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 

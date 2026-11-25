@@ -1,6 +1,7 @@
 'use client';
 
 import MetallicPaint from './MetallicPaint';
+import { isLiteLevel, useEffectsLevel } from '../lib/effects';
 
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 32 32"><path d="M4 16h5l3-8 5 16 3-8h8" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -9,6 +10,7 @@ const LOGO_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(LOGO_SVG
 // 品牌图标：用金属漆（Metallic Paint）渲染同一个波形 logo。
 // active=false 时退化成静态 SVG，避免每个隐藏标签页各建一个 WebGL 上下文。
 export default function BrandMark({ active = true, size = 38 }) {
+  const effectsLevel = useEffectsLevel();
   return (
     <div
       className="brand-mark is-metallic"
@@ -38,6 +40,7 @@ export default function BrandMark({ active = true, size = 38 }) {
           angle={70}
           speed={1.1}
           mouseTilt={0.4}
+          paused={isLiteLevel(effectsLevel)}
           intro
         />
       ) : null}

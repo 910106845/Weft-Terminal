@@ -4,6 +4,7 @@ import GridScan from './GridScan'
 import Icon from './Icons'
 import MetallicPaint from './MetallicPaint'
 import PageTag from './PageTag'
+import { isLiteLevel, isMinimalLevel, useEffectsLevel } from '../lib/effects'
 
 const Spline = lazy(() => import('@splinetool/react-spline'))
 
@@ -120,6 +121,7 @@ export default function HomePage({
   resolvedTheme,
   onToggleTheme
 }) {
+  const effectsLevel = useEffectsLevel()
   const handlers = {
     onNewSerial,
     onNewLocal,
@@ -238,7 +240,9 @@ export default function HomePage({
             />
           </div>
 
-          <SceneBackdrop onSceneReady={setSceneCanvas} />
+          {isMinimalLevel(effectsLevel) ? null : (
+            <SceneBackdrop onSceneReady={setSceneCanvas} />
+          )}
           <div className="home-scrim" aria-hidden="true" />
 
           <div className="home-content">
@@ -258,6 +262,7 @@ export default function HomePage({
                   speed={0.9}
                   scale={1}
                   mouseTilt={0.35}
+                  paused={isLiteLevel(effectsLevel)}
                   intro
                 />
               </div>

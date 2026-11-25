@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icons';
 import BrandMark from './BrandMark'
+import { isLiteLevel, useEffectsLevel } from '../lib/effects'
 import PageTag from './PageTag';
 import GhostCursor from './GhostCursor';
 import StatusCapsule from './StatusCapsule';
@@ -80,6 +81,7 @@ export default function VirtualPortPage({
   paneTag,
   paneTagClass
 }) {
+  const effectsLevel = useEffectsLevel()
   const [ports, setPorts] = useSharedJSON(
     `serialdebug.virtual.ports.${sessionId}`,
     DEFAULT_PORTS,
@@ -925,7 +927,7 @@ export default function VirtualPortPage({
       }`}
     >
       <header className="topbar">
-        {active ? (
+        {active && !isLiteLevel(effectsLevel) ? (
           <GhostCursor
             className="topbar-ghost"
             theme={resolvedTheme}

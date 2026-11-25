@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css'
 import Icon from './Icons'
 import GhostCursor from './GhostCursor'
 import BrandMark from './BrandMark'
+import { isLiteLevel, useEffectsLevel } from '../lib/effects'
 import PageTag from './PageTag'
 import StatusCapsule from './StatusCapsule'
 import GlassButton from './LiquidGlass'
@@ -399,6 +400,7 @@ export default function TerminalPage({
   paneTag,
   paneTagClass
 }) {
+  const effectsLevel = useEffectsLevel()
   const [status, setStatus] = useState('starting')
   const [shellInfo, setShellInfo] = useState(null)
   const [pid, setPid] = useState(null)
@@ -2151,7 +2153,7 @@ export default function TerminalPage({
       }`}
     >
       <header className="topbar">
-        {active ? (
+        {active && !isLiteLevel(effectsLevel) ? (
           <GhostCursor
             className="topbar-ghost"
             theme={resolvedTheme}
