@@ -54,6 +54,10 @@ contextBridge.exposeInMainWorld('terminalAPI', {
     ipcRenderer.invoke('terminal:create', { ...options, terminalId }),
   write: (terminalId, data) =>
     ipcRenderer.send('terminal:input', { terminalId, data }),
+  pause: (terminalId) =>
+    ipcRenderer.send('terminal:pause', { terminalId }),
+  resume: (terminalId) =>
+    ipcRenderer.send('terminal:resume', { terminalId }),
   resize: (terminalId, cols, rows) =>
     ipcRenderer.send('terminal:resize', { terminalId, cols, rows }),
   close: (terminalId) =>

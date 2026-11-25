@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import Icon from './Icons'
 import GhostCursor from './GhostCursor'
@@ -26,6 +27,14 @@ import {
   getTerminalFontFamily,
   normalizeTerminalDisplay
 } from '../lib/terminalDisplay'
+import {
+  TERMINAL_THEMES,
+  TUI_TERM_THEME,
+  getTerminalTheme,
+  isDarkTerminalTheme,
+  terminalThemePreset,
+  terminalThemeSwatch
+} from '../lib/terminalThemes'
 import { formatDateForFile, formatTime } from '../lib/format'
 import { SSH_ENCODINGS, sshProfileLabel } from '../lib/sshProfiles'
 import {
@@ -132,117 +141,6 @@ function trackInputLine (line, data) {
     index += 1
   }
   return submitted
-}
-
-const LIGHT_TERM_THEME = {
-  background: '#f8fafd',
-  foreground: '#26384d',
-  cursor: '#0f9d78',
-  cursorAccent: '#f8fafd',
-  selectionBackground: 'rgba(15, 157, 120, 0.2)',
-  black: '#243246',
-  red: '#b83b51',
-  green: '#0f8f74',
-  yellow: '#946200',
-  blue: '#2563b8',
-  magenta: '#7c3aed',
-  cyan: '#0e7490',
-  white: '#64748b',
-  brightBlack: '#7b8b9e',
-  brightRed: '#d92d4d',
-  brightGreen: '#059669',
-  brightYellow: '#b45309',
-  brightBlue: '#1d4ed8',
-  brightMagenta: '#6d28d9',
-  brightCyan: '#0891b2',
-  brightWhite: '#1f3148'
-}
-
-const DARK_TERM_THEME = {
-  background: '#0b0b0c',
-  foreground: '#e8e8ea',
-  cursor: '#7ef0c6',
-  cursorAccent: '#0b0b0c',
-  selectionBackground: 'rgba(126, 240, 198, 0.24)',
-  black: '#101012',
-  red: '#ff7a90',
-  green: '#7ef0c6',
-  yellow: '#f4d58d',
-  blue: '#72c7ff',
-  magenta: '#c39bff',
-  cyan: '#6fe8f1',
-  white: '#e8e8ea',
-  brightBlack: '#85858a',
-  brightRed: '#ff9caf',
-  brightGreen: '#a9ffde',
-  brightYellow: '#ffe3a3',
-  brightBlue: '#9ad8ff',
-  brightMagenta: '#ddbfff',
-  brightCyan: '#a6f7ff',
-  brightWhite: '#f5f5f6'
-}
-
-const ENHANCED_LIGHT_TERM_THEME = {
-  background: '#fbfcfe',
-  foreground: '#142842',
-  cursor: '#007f68',
-  cursorAccent: '#ffffff',
-  selectionBackground: 'rgba(0, 127, 104, 0.2)',
-  black: '#1b2b3d',
-  red: '#b4233b',
-  green: '#007a5e',
-  yellow: '#7a5600',
-  blue: '#1d4ed8',
-  magenta: '#6d28d9',
-  cyan: '#007c91',
-  white: '#52657a',
-  brightBlack: '#687b8f',
-  brightRed: '#d92d4d',
-  brightGreen: '#059669',
-  brightYellow: '#a16207',
-  brightBlue: '#1e40af',
-  brightMagenta: '#5b21b6',
-  brightCyan: '#0e7490',
-  brightWhite: '#1f3148'
-}
-
-const ENHANCED_DARK_TERM_THEME = {
-  background: '#0b0b0c',
-  foreground: '#eef0f2',
-  cursor: '#86ffd6',
-  cursorAccent: '#0b0b0c',
-  selectionBackground: 'rgba(134, 255, 214, 0.24)',
-  black: '#101012',
-  red: '#ff8096',
-  green: '#86ffd6',
-  yellow: '#ffe19a',
-  blue: '#83d3ff',
-  magenta: '#d0b0ff',
-  cyan: '#8cf5ff',
-  white: '#eef0f2',
-  brightBlack: '#8a8a8f',
-  brightRed: '#ffabb9',
-  brightGreen: '#b7ffe9',
-  brightYellow: '#fff0c4',
-  brightBlue: '#b1e4ff',
-  brightMagenta: '#e6d1ff',
-  brightCyan: '#c4fbff',
-  brightWhite: '#ffffff'
-}
-
-const TUI_TERM_THEME = {
-  ...ENHANCED_DARK_TERM_THEME,
-  background: '#000000',
-  cursorAccent: '#000000'
-}
-
-function terminalTheme(theme, enhanced = true) {
-  if (enhanced) {
-    return theme === 'dark'
-      ? ENHANCED_DARK_TERM_THEME
-      : ENHANCED_LIGHT_TERM_THEME
-  }
-  return theme === 'dark' ? DARK_TERM_THEME : LIGHT_TERM_THEME
 }
 
 function searchDecorationOptions(theme) {
@@ -1023,7 +921,11 @@ export default function TerminalPage({
       const addon = searchAddonRef.current
       if (!addon || !normalizedSearchQuery) return
       const options = {
-        decorations: searchDecorationOptions(themeRef.current),
+        decorations: searchDecorationOptions(
+          isDarkTerminalTheme(displayRef.current.themeId, themeRef.current)
+            ? 'dark'
+            : 'light'
+        ),
         incremental: false
       }
       if (direction < 0) addon.findPrevious(normalizedSearchQuery, options)
@@ -1050,7 +952,9 @@ export default function TerminalPage({
       return
     }
     addon.findNext(normalizedSearchQuery, {
-      decorations: searchDecorationOptions(resolvedTheme),
+      decorations: searchDecorationOptions(
+        isDarkTerminalTheme(display.themeId, resolvedTheme) ? 'dark' : 'light'
+      ),
       incremental: true
     })
   }, [normalizedSearchQuery, resolvedTheme, searchOpen])
@@ -1238,7 +1142,10 @@ export default function TerminalPage({
       convertEol: false,
       rightClickSelectsWord: true,
       allowProposedApi: true,
-      theme: terminalTheme(themeRef.current, displayRef.current.enhanced)
+      theme: getTerminalTheme(
+        displayRef.current.themeId,
+        themeRef.current
+      )
     })
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
@@ -1246,6 +1153,24 @@ export default function TerminalPage({
     term.loadAddon(unicode11Addon)
     term.unicode.activeVersion = '11'
     term.open(container)
+
+    // 优先使用 WebGL 渲染器，长日志滚动比 DOM 渲染流畅很多；
+    // 显卡/远程桌面不支持时自动退回 xterm 默认渲染器。
+    let webglAddon = null
+    try {
+      webglAddon = new WebglAddon()
+      term.loadAddon(webglAddon)
+      webglAddon.onContextLoss(() => {
+        try {
+          webglAddon?.dispose()
+        } catch {
+          // ignore
+        }
+        webglAddon = null
+      })
+    } catch {
+      webglAddon = null
+    }
 
     // 直接写入 PTY，绕过 xterm 的 bracketed paste，避免 zsh 等 Shell
     // 把粘贴内容显示成高亮/反显的 paste 区域。
@@ -1277,7 +1202,7 @@ export default function TerminalPage({
       setAlternateScreen(isAlternate)
       term.options.theme = isAlternate
         ? TUI_TERM_THEME
-        : terminalTheme(themeRef.current, displayRef.current.enhanced)
+        : getTerminalTheme(displayRef.current.themeId, themeRef.current)
       term.options.minimumContrastRatio = isAlternate ? 4.5 : 1
       if (!isAlternate) neutralizeCharset(term)
       scheduleFit()
@@ -1321,6 +1246,29 @@ export default function TerminalPage({
     const viewportElement = container.querySelector('.xterm-viewport')
 
     const HOLD_LIMIT = 8 * 1024 * 1024
+    const WRITE_HIGH = 512 * 1024
+    const WRITE_LOW = 128 * 1024
+    let pendingWriteBytes = 0
+    let flowPaused = false
+    const pauseFlow = () => {
+      if (flowPaused) return
+      flowPaused = true
+      window.terminalAPI?.pause?.(sessionId)
+    }
+    const resumeFlow = () => {
+      if (!flowPaused) return
+      flowPaused = false
+      window.terminalAPI?.resume?.(sessionId)
+    }
+    const writeToTerm = (data) => {
+      if (!data) return
+      pendingWriteBytes += data.length
+      if (pendingWriteBytes >= WRITE_HIGH) pauseFlow()
+      term.write(data, () => {
+        pendingWriteBytes = Math.max(0, pendingWriteBytes - data.length)
+        if (pendingWriteBytes <= WRITE_LOW) resumeFlow()
+      })
+    }
     const outputHold = outputHoldRef.current
     const flushHeldOutput = () => {
       if (!outputHold.chunks.length) {
@@ -1331,7 +1279,7 @@ export default function TerminalPage({
       outputHold.chunks = []
       outputHold.size = 0
       outputHold.paused = false
-      term.write(data)
+      writeToTerm(data)
     }
     const syncOutputHold = () => {
       if (!viewportElement) return
@@ -1467,6 +1415,7 @@ export default function TerminalPage({
         if (outputHold.paused) {
           outputHold.chunks.push(payload.data)
           outputHold.size += payload.data.length
+          if (outputHold.size >= 4 * 1024 * 1024) pauseFlow()
           while (
             outputHold.chunks.length > 1 &&
             outputHold.size > HOLD_LIMIT
@@ -1474,7 +1423,7 @@ export default function TerminalPage({
             outputHold.size -= outputHold.chunks.shift().length
           }
         } else {
-          term.write(payload.data)
+          writeToTerm(payload.data)
         }
         if (
           payload.data.length > 24 ||
@@ -1601,6 +1550,13 @@ export default function TerminalPage({
       if (scrollIdleTimer) clearTimeout(scrollIdleTimer)
       clearLogDecorations()
       clearTimestampMarkers()
+      if (flowPaused) window.terminalAPI?.resume?.(sessionId)
+      try {
+        webglAddon?.dispose()
+      } catch {
+        // ignore
+      }
+      webglAddon = null
       searchAddon.dispose()
       searchAddonRef.current = null
       window.terminalAPI?.close(sessionId)?.catch?.(() => {})
@@ -1631,7 +1587,7 @@ export default function TerminalPage({
     term.options.cursorStyle = nextDisplay.cursorStyle
     term.options.theme = alternateScreen
       ? TUI_TERM_THEME
-      : terminalTheme(resolvedTheme, nextDisplay.enhanced)
+      : getTerminalTheme(nextDisplay.themeId, resolvedTheme)
     scheduleFit()
     scheduleLogHighlights(0)
     scheduleTimestampUpdate(0)
@@ -2299,6 +2255,7 @@ export default function TerminalPage({
     [markCommandUsed, showToast, writeCommand]
   )
 
+  const terminalTheme = getTerminalTheme(display.themeId, resolvedTheme)
   const running = status === 'running'
   const starting = status === 'starting'
   const shellLabel =
@@ -2317,6 +2274,10 @@ export default function TerminalPage({
       className={`app terminal-page ${isSsh ? 'is-ssh' : 'is-local'} ${
         split ? 'is-split' : ''
       }`}
+      style={{
+        '--term-surface-bg': terminalTheme.background,
+        '--terminal-theme-muted': `color-mix(in srgb, ${terminalTheme.foreground} 58%, transparent)`
+      }}
     >
       <header className="topbar">
         {active && !isLiteLevel(effectsLevel) ? (
@@ -2532,6 +2493,41 @@ export default function TerminalPage({
                   >
                     重置
                   </button>
+                </div>
+                <div className="terminal-display-themes">
+                  <span className="terminal-display-label">主题</span>
+                  <div className="terminal-theme-grid">
+                    {TERMINAL_THEMES.map((theme) => {
+                      const active = display.themeId === theme.id
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          className={`terminal-theme-chip ${
+                            active ? 'is-active' : ''
+                          }`}
+                          onClick={() =>
+                            updateDisplay(terminalThemePreset(theme.id))
+                          }
+                          title={`${theme.label}：同时应用推荐字体、字号和光标样式`}
+                        >
+                          <span className="terminal-theme-colors">
+                            {terminalThemeSwatch(theme.id, resolvedTheme).map(
+                              (color, index) => (
+                                <i key={index} style={{ background: color }} />
+                              )
+                            )}
+                          </span>
+                          <span className="terminal-theme-name">
+                            {theme.label}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <span className="terminal-theme-hint">
+                    选择主题会同时应用推荐字体、字号和光标样式
+                  </span>
                 </div>
                 <div className="terminal-display-row">
                   <span className="terminal-display-label">字号</span>

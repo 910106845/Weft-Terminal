@@ -3314,6 +3314,28 @@ ipcMain.handle('terminal:create', async (event, options = {}) => {
   }
 })
 
+ipcMain.on('terminal:pause', (event, payload = {}) => {
+  const session = terminals.get(payload.terminalId)
+  if (!session || session.ownerId !== event.sender.id) return
+  try {
+    if (session.kind === 'ssh') session.stream?.pause?.()
+    else session.terminal?.pause?.()
+  } catch {
+    // 终端已退出时忽略
+  }
+})
+
+ipcMain.on('terminal:resume', (event, payload = {}) => {
+  const session = terminals.get(payload.terminalId)
+  if (!session || session.ownerId !== event.sender.id) return
+  try {
+    if (session.kind === 'ssh') session.stream?.resume?.()
+    else session.terminal?.resume?.()
+  } catch {
+    // 终端已退出时忽略
+  }
+})
+
 ipcMain.on('terminal:input', (event, payload = {}) => {
   const session = terminals.get(payload.terminalId)
   if (!session || session.ownerId !== event.sender.id) return

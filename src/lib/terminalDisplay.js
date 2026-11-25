@@ -1,3 +1,5 @@
+import { TERMINAL_THEME_IDS } from './terminalThemes'
+
 export const TERMINAL_FONT_GROUPS = [
   {
     label: '系统',
@@ -159,6 +161,7 @@ const FONT_VALUES = new Set(
 )
 
 export const DEFAULT_TERMINAL_DISPLAY = {
+  themeId: 'weft',
   fontSize: 13,
   lineHeight: 1.45,
   cursorStyle: 'bar',
@@ -186,6 +189,9 @@ function clamp(value, min, max, fallback) {
 export function normalizeTerminalDisplay(raw) {
   const value = raw && typeof raw === 'object' ? raw : {}
   return {
+    themeId: TERMINAL_THEME_IDS.has(value.themeId)
+      ? value.themeId
+      : DEFAULT_TERMINAL_DISPLAY.themeId,
     fontSize: clamp(value.fontSize, 10, 22, DEFAULT_TERMINAL_DISPLAY.fontSize),
     lineHeight: clamp(
       value.lineHeight,
