@@ -492,6 +492,9 @@ export default function TerminalPage({
   const shellIdRef = useRef(initialShellId)
   const fitFrameRef = useRef(null)
   const scrollbarFrameRef = useRef(null)
+  // 用户向上滚动时暂存新输出，避免和自动跟随互相拉扯导致抖动
+  const outputHoldRef = useRef({ paused: false, chunks: [], size: 0 })
+  const lastOutputAtRef = useRef(0)
   const logDecorationRefs = useRef([])
   const logHighlightTimerRef = useRef(null)
   const logHighlightSignatureRef = useRef('')
@@ -1286,23 +1289,53 @@ export default function TerminalPage({
       scheduleLogHighlights(150)
       scheduleTimestampUpdate(100)
     })
-    let timestampScrollFrame = 0
+    let scrollIdleTimer = 0
     const onTerminalScroll = () => {
-      if (!timestampScrollFrame) {
-        timestampScrollFrame = requestAnimationFrame(() => {
-          timestampScrollFrame = 0
-          if (timestampTimerRef.current) {
-            clearTimeout(timestampTimerRef.current)
-            timestampTimerRef.current = null
-          }
-          updateTimestampLabels()
-        })
-      }
-      scheduleLogHighlights(16)
+      // 滚动时不要每帧扫描时间戳和高亮，长行内容下会明显掉帧。
+      // 等滚动停下来 120ms 后再统一刷新一次。
+      if (scrollIdleTimer) clearTimeout(scrollIdleTimer)
+      scrollIdleTimer = setTimeout(() => {
+        scrollIdleTimer = 0
+        if (timestampTimerRef.current) {
+          clearTimeout(timestampTimerRef.current)
+          timestampTimerRef.current = null
+        }
+        scheduleTimestampUpdate(0)
+        scheduleLogHighlights(0)
+      }, 120)
+      syncOutputHold()
     }
     const scrollDisposable = term.onScroll(onTerminalScroll)
     const viewportElement = container.querySelector('.xterm-viewport')
+
+    const HOLD_LIMIT = 8 * 1024 * 1024
+    const outputHold = outputHoldRef.current
+    const flushHeldOutput = () => {
+      if (!outputHold.chunks.length) {
+        outputHold.paused = false
+        return
+      }
+      const data = outputHold.chunks.join('')
+      outputHold.chunks = []
+      outputHold.size = 0
+      outputHold.paused = false
+      term.write(data)
+    }
+    const syncOutputHold = () => {
+      if (!viewportElement) return
+      const atBottom =
+        viewportElement.scrollTop + viewportElement.clientHeight >=
+        viewportElement.scrollHeight - 4
+      if (atBottom) {
+        flushHeldOutput()
+      } else {
+        outputHold.paused = true
+      }
+    }
     viewportElement?.addEventListener('scroll', onTerminalScroll, {
+      passive: true
+    })
+    viewportElement?.addEventListener('scroll', syncOutputHold, {
       passive: true
     })
 
@@ -1401,6 +1434,7 @@ export default function TerminalPage({
     let replayTimer = 0
     const offData = window.terminalAPI?.onData((payload) => {
       if (payload?.terminalId === sessionId) {
+        lastOutputAtRef.current = Date.now()
         // 重连成功后先等远端输出安静下来（提示符/MOTD 画完），
         // 再把断线期间暂存的输入填回命令行，避免 Shell 启动阶段重复回显。
         if (pendingReplayRef.current) {
@@ -1418,7 +1452,18 @@ export default function TerminalPage({
             termRef.current?.focus()
           }, 500)
         }
-        term.write(payload.data)
+        if (outputHold.paused) {
+          outputHold.chunks.push(payload.data)
+          outputHold.size += payload.data.length
+          while (
+            outputHold.chunks.length > 1 &&
+            outputHold.size > HOLD_LIMIT
+          ) {
+            outputHold.size -= outputHold.chunks.shift().length
+          }
+        } else {
+          term.write(payload.data)
+        }
         if (
           payload.data.length > 24 ||
           payload.data.indexOf('\n') !== -1
@@ -1459,6 +1504,10 @@ export default function TerminalPage({
 
     const dataDisposable = term.onData((data) => {
       lastInputAtRef.current = Date.now()
+      if (outputHold.paused) {
+        term.scrollToBottom()
+        flushHeldOutput()
+      }
       if (statusRef.current === 'disconnected') {
         if (Date.now() - offlineToastAtRef.current > 2400) {
           offlineToastAtRef.current = Date.now()
@@ -1536,7 +1585,8 @@ export default function TerminalPage({
       writeParsedDisposable.dispose()
       scrollDisposable.dispose()
       viewportElement?.removeEventListener('scroll', onTerminalScroll)
-      if (timestampScrollFrame) cancelAnimationFrame(timestampScrollFrame)
+      viewportElement?.removeEventListener('scroll', syncOutputHold)
+      if (scrollIdleTimer) clearTimeout(scrollIdleTimer)
       clearLogDecorations()
       clearTimestampMarkers()
       searchAddon.dispose()
@@ -1626,24 +1676,31 @@ export default function TerminalPage({
     const term = termRef.current
     if (!term) return
 
-    // Windows 的 ConPTY 自己维护屏幕缓冲。只清 xterm 的缓冲会让
-    // ConPTY 的光标仍停在旧行，下一次输出就会在中间留下大片空白。
-    // 因此优先让 Shell 自己清屏，终端随后收到标准清屏序列，双方保持同步。
+    // 先清本地缓冲，保证点击后立即有反馈；
+    // 再通知 Shell 清屏，让 ConPTY / 远端终端与 xterm 光标重新同步。
+    // 只做本地 clear 会留下大片空白，只做 Shell clear 在命令运行时又没反应。
+    const outputHold = outputHoldRef.current
+    outputHold.paused = false
+    outputHold.chunks = []
+    outputHold.size = 0
+    term.clear()
     const canWrite = status === 'running' && window.terminalAPI?.write
     if (canWrite) {
       if (transport === 'ssh') {
         // readline / zsh / bash 的标准 ClearScreen
         window.terminalAPI.write(sessionId, '\x0c')
       } else if (shellInfo?.id === 'cmd') {
-        // cmd 不支持 Ctrl+L：先用 Esc 清掉当前输入行，再执行 cls
-        window.terminalAPI.write(sessionId, '\x1bcls\r')
+        // cmd 不支持 Ctrl+L：空闲（大概率在提示符）时才发送 Esc + cls；
+        // 命令仍在输出时只发 Ctrl+L，避免把 cls 当成前台程序的输入。
+        const busy = Date.now() - lastOutputAtRef.current < 700
+        window.terminalAPI.write(
+          sessionId,
+          busy ? '\x0c' : '\x1bcls\r'
+        )
       } else {
         // PowerShell（PSReadLine）和其他本地 Shell
         window.terminalAPI.write(sessionId, '\x0c')
       }
-    } else {
-      // 已断开时没有 Shell 可转发，退化为本地清屏
-      term.clear()
     }
     term.focus()
   }, [
@@ -2141,9 +2198,24 @@ export default function TerminalPage({
       }
       const text = String(command ?? '')
       if (!text) return false
-      const payload = withEnter
-        ? `${text.replace(/\r?\n/g, '\r').replace(/\r+$/, '')}\r`
-        : text
+      let payload
+      if (withEnter) {
+        // 运行：把换行转换成回车，让 Shell 逐条执行，避免 LF 造成错位
+        payload = `${text.replace(/\r?\n/g, '\r').replace(/\r+$/, '')}\r`
+      } else if (/\r?\n/.test(text)) {
+        // 填入多行指令：终端输入区只能保存一行。直接发送 LF 会被
+        // PowerShell/cmd 当作未完成输入，出现 >> 续行和错位。
+        // 这里按当前 Shell 的语句分隔符合并成一行，保留可编辑状态。
+        const separator =
+          transport === 'local' && shellInfo?.id === 'cmd' ? ' & ' : '; '
+        payload = text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .join(separator)
+      } else {
+        payload = text
+      }
       neutralizeCharset(termRef.current)
       window.terminalAPI?.write(sessionId, payload)
       if (withEnter) {
@@ -2152,7 +2224,7 @@ export default function TerminalPage({
       termRef.current?.focus()
       return true
     },
-    [historyKey, sessionId, showToast, status]
+    [historyKey, sessionId, shellInfo?.id, showToast, status, transport]
   )
 
   const insertCommand = useCallback(
@@ -2160,7 +2232,11 @@ export default function TerminalPage({
       if (!writeCommand(item.command, false)) return
       markCommandUsed(item.id)
       setLibraryOpen(false)
-      showToast('已填入终端，按 Enter 执行')
+      showToast(
+        /\r?\n/.test(String(item.command || ''))
+          ? '多行指令已合并为一行填入，按 Enter 执行'
+          : '已填入终端，按 Enter 执行'
+      )
     },
     [markCommandUsed, showToast, writeCommand]
   )

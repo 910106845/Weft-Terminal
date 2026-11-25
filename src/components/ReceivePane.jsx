@@ -207,6 +207,8 @@ export default function ReceivePane({
 }) {
   const bodyRef = useRef(null)
   const searchInputRef = useRef(null)
+  // 用户手动向上滚动后暂停自动滚屏，避免新日志把滚动条反复拉回底部
+  const stickToBottomRef = useRef(true)
   // 多个串口标签同时挂载时 ID 必须唯一，否则渐变会引用到隐藏标签里的节点
   const waveGradientId = `wave-gradient-${useId().replace(/:/g, '')}`
   const [atBottom, setAtBottom] = useState(true)
@@ -236,6 +238,7 @@ export default function ReceivePane({
   const scrollToBottom = () => {
     const element = bodyRef.current
     if (!element) return
+    stickToBottomRef.current = true
     element.scrollTop = element.scrollHeight
     setAtBottom(true)
   }
@@ -283,7 +286,7 @@ export default function ReceivePane({
   useEffect(() => {
     const element = bodyRef.current
     if (!element) return
-    if (recv.autoScroll && !searching) {
+    if (recv.autoScroll && !searching && stickToBottomRef.current) {
       element.scrollTop = element.scrollHeight
       setAtBottom(true)
     } else {
@@ -292,6 +295,14 @@ export default function ReceivePane({
       )
     }
   }, [lines, recv.autoScroll, searching])
+
+  // 重新打开自动滚屏时，立即跳回底部并恢复跟随
+  useEffect(() => {
+    if (!recv.autoScroll) return
+    stickToBottomRef.current = true
+    const element = bodyRef.current
+    if (element) element.scrollTop = element.scrollHeight
+  }, [recv.autoScroll])
 
   useEffect(() => {
     const handler = (event) => {
@@ -423,9 +434,10 @@ export default function ReceivePane({
         }}
         onScroll={(event) => {
           const element = event.currentTarget
-          setAtBottom(
-            element.scrollHeight - element.scrollTop - element.clientHeight < 32
-          )
+          const distance =
+            element.scrollHeight - element.scrollTop - element.clientHeight
+          stickToBottomRef.current = distance < 32
+          setAtBottom(distance < 32)
         }}
       >
         {lines.length === 0 ? (
