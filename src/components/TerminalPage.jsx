@@ -372,6 +372,16 @@ function SystemStatsBar({ stats, remote }) {
   )
 }
 
+// 快速判断一行是否有可见字符，避免对超长日志行反复构建完整字符串
+function bufferLineHasText (line) {
+  if (!line) return false
+  for (let x = 0; x < line.length; x += 1) {
+    const code = line.getCell(x)?.getCode()
+    if (code && code > 32 && code !== 127) return true
+  }
+  return false
+}
+
 export default function TerminalPage({
   sessionId,
   active,
@@ -495,6 +505,8 @@ export default function TerminalPage({
   // 用户向上滚动时暂存新输出，避免和自动跟随互相拉扯导致抖动
   const outputHoldRef = useRef({ paused: false, chunks: [], size: 0 })
   const lastOutputAtRef = useRef(0)
+  const pendingClearRef = useRef(false)
+  const clearPollRef = useRef(0)
   const logDecorationRefs = useRef([])
   const logHighlightTimerRef = useRef(null)
   const logHighlightSignatureRef = useRef('')
@@ -756,7 +768,7 @@ export default function TerminalPage({
     for (let y = start; y < buffer.length; y += 1) {
       const line = buffer.getLine(y)
       if (!line) continue
-      if (!line.translateToString(true).trim()) continue
+      if (!bufferLineHasText(line)) continue
       addMarker(y)
     }
 
@@ -769,11 +781,11 @@ export default function TerminalPage({
         labels.push('')
         continue
       }
-      const text = line.translateToString(true).trim()
-      if (text && !byLine.has(y)) addMarker(y)
+      const hasText = bufferLineHasText(line)
+      if (hasText && !byLine.has(y)) addMarker(y)
       const entry = byLine.get(y)
       labels.push(
-        text && entry?.time
+        hasText && entry?.time
           ? formatTime(new Date(entry.time)).slice(0, 8)
           : ''
       )
@@ -855,7 +867,7 @@ export default function TerminalPage({
       const start = Math.max(0, buffer.baseY - 200)
       for (let y = buffer.baseY - 1; y >= start; y -= 1) {
         const line = buffer.getLine(y)
-        if (line && line.translateToString(true).trim()) {
+        if (line && bufferLineHasText(line)) {
           hasScrollback = true
           break
         }
@@ -1667,51 +1679,87 @@ export default function TerminalPage({
     return () => window.removeEventListener('keydown', handler, true)
   }, [active])
 
-  const clearTerminal = useCallback(() => {
-    // term.clear() 不会自动移除 SearchAddon 的 decoration，
-    // 否则清屏后会在空白区域残留一个高亮框。
+  const sendNativeClear = useCallback(() => {
+    if (status !== 'running') return
+    const api = window.terminalAPI
+    if (!api?.write) return
+    if (transport === 'ssh') {
+      // readline / zsh / bash 的标准 ClearScreen
+      api.write(sessionId, '\x0c')
+      return
+    }
+    if (shellInfo?.id === 'cmd') {
+      // cmd 不支持 Ctrl+L：空闲时用 Esc + cls；
+      // 命令仍在输出时只发 Ctrl+L，避免把 cls 当成前台程序的输入。
+      const busy = Date.now() - lastOutputAtRef.current < 700
+      api.write(sessionId, busy ? '\x0c' : '\x1bcls\r')
+      return
+    }
+    api.write(sessionId, '\x0c')
+  }, [sessionId, shellInfo?.id, status, transport])
+
+  const runFullClear = useCallback(() => {
     resetTerminalSearch()
     clearLogDecorations()
     clearTimestampMarkers()
     const term = termRef.current
     if (!term) return
-
     // 先清本地缓冲，保证点击后立即有反馈；
     // 再通知 Shell 清屏，让 ConPTY / 远端终端与 xterm 光标重新同步。
-    // 只做本地 clear 会留下大片空白，只做 Shell clear 在命令运行时又没反应。
     const outputHold = outputHoldRef.current
     outputHold.paused = false
     outputHold.chunks = []
     outputHold.size = 0
     term.clear()
-    const canWrite = status === 'running' && window.terminalAPI?.write
-    if (canWrite) {
-      if (transport === 'ssh') {
-        // readline / zsh / bash 的标准 ClearScreen
-        window.terminalAPI.write(sessionId, '\x0c')
-      } else if (shellInfo?.id === 'cmd') {
-        // cmd 不支持 Ctrl+L：空闲（大概率在提示符）时才发送 Esc + cls；
-        // 命令仍在输出时只发 Ctrl+L，避免把 cls 当成前台程序的输入。
-        const busy = Date.now() - lastOutputAtRef.current < 700
-        window.terminalAPI.write(
-          sessionId,
-          busy ? '\x0c' : '\x1bcls\r'
-        )
-      } else {
-        // PowerShell（PSReadLine）和其他本地 Shell
-        window.terminalAPI.write(sessionId, '\x0c')
-      }
-    }
+    sendNativeClear()
     term.focus()
   }, [
     clearLogDecorations,
     clearTimestampMarkers,
     resetTerminalSearch,
-    sessionId,
-    shellInfo?.id,
-    status,
-    transport
+    sendNativeClear
   ])
+
+  const schedulePendingClear = useCallback(() => {
+    if (clearPollRef.current) return
+    const tick = () => {
+      clearPollRef.current = 0
+      if (!pendingClearRef.current) return
+      if (Date.now() - lastOutputAtRef.current < 700) {
+        clearPollRef.current = window.setTimeout(tick, 250)
+        return
+      }
+      pendingClearRef.current = false
+      runFullClear()
+    }
+    clearPollRef.current = window.setTimeout(tick, 250)
+  }, [runFullClear])
+
+  const clearTerminal = useCallback(() => {
+    const term = termRef.current
+    if (!term) return
+    // 命令仍在输出时只发送清屏请求，等输出停下来再做本地清屏。
+    // 立刻本地清屏会让 ConPTY 的光标停在旧行，后续日志前面出现大片空白。
+    const busy = Date.now() - lastOutputAtRef.current < 700
+    if (busy && status === 'running') {
+      pendingClearRef.current = true
+      sendNativeClear()
+      showToast('命令仍在输出，输出暂停后自动清屏')
+      schedulePendingClear()
+      term.focus()
+      return
+    }
+    pendingClearRef.current = false
+    runFullClear()
+  }, [runFullClear, schedulePendingClear, sendNativeClear, showToast, status])
+
+  useEffect(() => {
+    return () => {
+      if (clearPollRef.current) clearTimeout(clearPollRef.current)
+      clearPollRef.current = 0
+      pendingClearRef.current = false
+    }
+  }, [])
 
   const answerHostKey = useCallback(
     (accept) => {
