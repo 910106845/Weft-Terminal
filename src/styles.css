@@ -6991,8 +6991,8 @@ button:focus-visible,
 
 .terminal-time-gutter {
   flex: none;
-  /* 宽度跟着时间文字走，让时间戳的左留白和右侧内边距一致（不再有额外的空档） */
-  width: max-content;
+  /* 固定宽度，避免时间戳出现/消失时挤压终端导致横向回流 */
+  width: 52px;
   height: var(--timestamp-total-height, auto);
   margin-right: 8px;
   padding-right: 8px;

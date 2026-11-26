@@ -740,12 +740,10 @@ export default function TerminalPage({
   const scheduleTimestampUpdate = useCallback(
     (delay = 60) => {
       if (timestampTimerRef.current) return
-      // 输入时延迟扫描时间戳列，避免每个回显字符都做一次 400 行扫描
-      const typing = Date.now() - lastInputAtRef.current < 600
       timestampTimerRef.current = setTimeout(() => {
         timestampTimerRef.current = null
         updateTimestampLabels()
-      }, typing ? Math.max(delay, 500) : delay)
+      }, delay)
     },
     [updateTimestampLabels]
   )
@@ -1224,20 +1222,26 @@ export default function TerminalPage({
         })
       }
       scheduleLogHighlights(150)
-      scheduleTimestampUpdate(100)
+      scheduleTimestampUpdate(0)
     })
     let scrollIdleTimer = 0
+    let timestampScrollFrame = 0
     const onTerminalScroll = () => {
-      // 滚动时不要每帧扫描时间戳和高亮，长行内容下会明显掉帧。
-      // 等滚动停下来 120ms 后再统一刷新一次。
+      // 时间戳列必须跟随视口滚动，否则会慢一拍。
+      // 每帧只更新可见行，开销很小；日志高亮仍然等滚动停止后再刷新。
+      if (!timestampScrollFrame) {
+        timestampScrollFrame = requestAnimationFrame(() => {
+          timestampScrollFrame = 0
+          if (timestampTimerRef.current) {
+            clearTimeout(timestampTimerRef.current)
+            timestampTimerRef.current = null
+          }
+          updateTimestampLabels()
+        })
+      }
       if (scrollIdleTimer) clearTimeout(scrollIdleTimer)
       scrollIdleTimer = setTimeout(() => {
         scrollIdleTimer = 0
-        if (timestampTimerRef.current) {
-          clearTimeout(timestampTimerRef.current)
-          timestampTimerRef.current = null
-        }
-        scheduleTimestampUpdate(0)
         scheduleLogHighlights(0)
       }, 120)
       syncOutputHold()
@@ -1548,6 +1552,7 @@ export default function TerminalPage({
       viewportElement?.removeEventListener('scroll', onTerminalScroll)
       viewportElement?.removeEventListener('scroll', syncOutputHold)
       if (scrollIdleTimer) clearTimeout(scrollIdleTimer)
+      if (timestampScrollFrame) cancelAnimationFrame(timestampScrollFrame)
       clearLogDecorations()
       clearTimestampMarkers()
       if (flowPaused) window.terminalAPI?.resume?.(sessionId)
@@ -1574,7 +1579,8 @@ export default function TerminalPage({
     scheduleTimestampUpdate,
     sessionId,
     spawnSession,
-    syncTerminalScrollbar
+    syncTerminalScrollbar,
+    updateTimestampLabels
   ])
 
   useEffect(() => {
