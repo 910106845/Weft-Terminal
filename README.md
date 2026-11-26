@@ -6,14 +6,18 @@
 
 ![Weft Terminal](docs/weft-terminal.jpg)
 
-`macOS` · `Windows` · `Electron` · `React` · `xterm.js` · `MIT`
+> **macOS 和 Windows 均可使用，功能保持一致。** macOS 提供 Apple Silicon / Intel 通用安装包，Windows 提供 NSIS 安装包，串口、终端、SSH、虚拟串口与工作台能力完全相同。
+
+`macOS` · `Windows 10 / 11` · `Electron` · `React` · `xterm.js` · `MIT`
 
 ## 下载安装
 
 前往 [Releases](https://github.com/910106845/Weft-Terminal/releases/latest) 下载最新版本：
 
-- **macOS**：`.dmg` 通用安装包（Apple Silicon / Intel）。
-- **Windows**：`.exe` 安装包（NSIS，支持覆盖升级）。
+| 平台 | 安装包 | 说明 |
+| --- | --- | --- |
+| macOS | `.dmg` | Apple Silicon / Intel 通用 |
+| Windows | `.exe` | Windows 10 / 11，NSIS 安装包，支持覆盖升级 |
 
 当前安装包未做代码签名：
 
@@ -56,6 +60,13 @@
 - 指令库（`⌘K`）独立保存本地终端命令，可搜索、排序、导入导出，点击填入或直接运行。
 - 14 套内置主题，可调字号、字体、行高与光标样式。
 - 支持完整效果 / 性能模式切换，低配设备可关闭动态背景。
+- Windows 下自动识别 PowerShell 7 / Windows PowerShell / 命令提示符，快捷键提示切换为 `Ctrl`。
+
+### Windows 本地终端
+
+Windows 版本与 macOS 使用同一套界面和交互。下面是 Windows 版运行命令提示符的界面：路径、快捷键和 Shell 菜单都会切换为 Windows 形态。
+
+![Windows 本地终端](docs/windows-terminal.png)
 
 ## SSH 终端
 
