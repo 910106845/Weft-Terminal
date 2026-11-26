@@ -7023,6 +7023,19 @@ button:focus-visible,
   white-space: nowrap;
 }
 
+.terminal-time-label:not(:empty) {
+  animation: terminal-time-in 0.16s ease;
+}
+
+@keyframes terminal-time-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.75;
+  }
+}
+
 .terminal-panel-meta .terminal-time-trigger {
   width: 22px;
   height: 22px;
