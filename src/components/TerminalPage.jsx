@@ -2601,7 +2601,7 @@ export default function TerminalPage({
                     })}
                   </div>
                   <span className="terminal-theme-hint">
-                    支持导入 VS Code（.json / .vsix）和 JetBrains（.icls / .jar）主题
+                    支持导入 VS Code（.json / .vsix）和 JetBrains（.icls / .theme.json / .jar）主题
                   </span>
                 </div>
                 <div className="terminal-display-row">

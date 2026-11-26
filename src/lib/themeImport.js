@@ -285,17 +285,11 @@ function readIclsAttributes (doc) {
   return attributes
 }
 
-export function parseJetBrainsIcls (xml, fallbackName = 'JetBrains 主题') {
-  if (typeof xml !== 'string' || !xml.trim()) {
-    throw new Error('不是有效的 JetBrains 主题文件')
-  }
+function parseSchemeXml (xml) {
   const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  if (doc.querySelector('parsererror')) {
-    throw new Error('JetBrains 主题 XML 解析失败')
-  }
+  if (doc.querySelector('parsererror')) return null
   const scheme = doc.querySelector('scheme')
-  if (!scheme) throw new Error('未找到 scheme 节点')
-
+  if (!scheme) return null
   const palette = {}
   doc.querySelectorAll('colors > option').forEach((option) => {
     const name = option.getAttribute('name')
@@ -306,52 +300,52 @@ export function parseJetBrainsIcls (xml, fallbackName = 'JetBrains 主题') {
       )
     }
   })
-  const attributes = readIclsAttributes(doc)
+  return {
+    scheme,
+    palette,
+    attributes: readIclsAttributes(doc)
+  }
+}
+
+function buildJetBrainsColors ({
+  dark,
+  background,
+  foreground,
+  cursor,
+  selection,
+  attributes = {},
+  accentColor,
+  secondaryAccentColor
+}) {
   const attr = (...names) =>
     names.map((name) => attributes[name]?.foreground).find(Boolean) || ''
-
-  const parentScheme = scheme.getAttribute('parent_scheme') || ''
-  const parentDark = !/light|default/i.test(parentScheme)
-  const background =
-    palette.CONSOLE_BACKGROUND_KEY ||
-    palette.CONSOLE_BACKGROUND ||
-    (parentDark ? '#2b2b2b' : '#ffffff')
-  const dark = isDarkColor(background)
   const fallback = dark ? GENERIC_DARK : GENERIC_LIGHT
-  const foreground =
-    palette.CONSOLE_NORMAL_OUTPUT ||
-    attr('TEXT') ||
-    (dark ? '#a9b7c6' : '#000000')
-  const selection =
-    palette.SELECTION_BACKGROUND ||
-    palette.SELECTED_TEXT_BACKGROUND ||
-    withAlpha(foreground, 0.24)
-
   const normal = {
     black: dark ? darken(background, 0.3) : lighten(background, 0.15),
     red: attr('DEFAULT_INVALID', 'LOG_ERROR', 'ERRORS_ATTRIBUTES') || fallback.red,
     green: attr('DEFAULT_STRING') || fallback.green,
-    yellow:
-      attr('DEFAULT_NUMBER', 'DEFAULT_KEYWORD') || fallback.yellow,
+    yellow: attr('DEFAULT_NUMBER', 'DEFAULT_KEYWORD') || fallback.yellow,
     blue:
       attr(
         'DEFAULT_FUNCTION_DECLARATION',
         'DEFAULT_CLASS_REFERENCE',
         'DEFAULT_STATIC_FIELD'
-      ) || fallback.blue,
+      ) ||
+      secondaryAccentColor ||
+      fallback.blue,
     magenta:
-      attr('DEFAULT_METADATA', 'DEFAULT_INSTANCE_FIELD') || fallback.magenta,
-    cyan:
-      attr('DEFAULT_PARAMETER', 'DEFAULT_CLASS_NAME') || fallback.cyan,
+      attr('DEFAULT_METADATA', 'DEFAULT_INSTANCE_FIELD') ||
+      accentColor ||
+      fallback.magenta,
+    cyan: attr('DEFAULT_PARAMETER', 'DEFAULT_CLASS_NAME') || fallback.cyan,
     white: foreground
   }
-
   const colors = {
     background,
     foreground,
-    cursor: palette.CARET_COLOR || foreground,
+    cursor: cursor || foreground,
     cursorAccent: background,
-    selectionBackground: selection
+    selectionBackground: selection || withAlpha(foreground, 0.24)
   }
   for (const key of ANSI_KEYS) {
     colors[key] = normal[key]
@@ -359,9 +353,86 @@ export function parseJetBrainsIcls (xml, fallbackName = 'JetBrains 主题') {
       ? lighten(normal[key], 0.14)
       : darken(normal[key], 0.14)
   }
+  return colors
+}
+
+export function parseJetBrainsIcls (xml, fallbackName = 'JetBrains 主题') {
+  if (typeof xml !== 'string' || !xml.trim()) {
+    throw new Error('不是有效的 JetBrains 主题文件')
+  }
+  const parsed = parseSchemeXml(xml)
+  if (!parsed) throw new Error('JetBrains 主题 XML 解析失败')
+
+  const { scheme, palette, attributes } = parsed
+  const parentScheme = scheme.getAttribute('parent_scheme') || ''
+  const parentDark = !/light|default/i.test(parentScheme)
+  const background =
+    palette.CONSOLE_BACKGROUND_KEY ||
+    palette.CONSOLE_BACKGROUND ||
+    (parentDark ? '#2b2b2b' : '#ffffff')
+  const dark = isDarkColor(background)
+  const foreground =
+    palette.CONSOLE_NORMAL_OUTPUT ||
+    attributes.TEXT?.foreground ||
+    (dark ? '#a9b7c6' : '#000000')
+  const colors = buildJetBrainsColors({
+    dark,
+    background,
+    foreground,
+    cursor: palette.CARET_COLOR || foreground,
+    selection:
+      palette.SELECTION_BACKGROUND ||
+      palette.SELECTED_TEXT_BACKGROUND ||
+      withAlpha(foreground, 0.24),
+    attributes
+  })
 
   return {
     label: scheme.getAttribute('name') || fallbackName,
+    mode: dark ? 'dark' : 'light',
+    colors,
+    display: { ...FALLBACK_DISPLAY }
+  }
+}
+
+// IntelliJ 2022.2+ 的 .theme.json 只包含 UI 颜色，语法色在 editorScheme XML 中。
+export function parseJetBrainsThemeJson (
+  json,
+  editorSchemeXml = '',
+  fallbackName = 'JetBrains 主题'
+) {
+  if (!json || typeof json !== 'object' || !json.colors) {
+    throw new Error('不是有效的 JetBrains .theme.json')
+  }
+  const palette = json.colors
+  const background =
+    palette.editorBackground ||
+    palette.primaryBackground ||
+    (json.dark === false ? '#ffffff' : '#2b2b2b')
+  const dark = json.dark === true || isDarkColor(background)
+  const foreground =
+    palette.primaryForeground ||
+    palette.editorForeground ||
+    (dark ? '#a9b7c6' : '#000000')
+  const scheme = editorSchemeXml ? parseSchemeXml(editorSchemeXml) : null
+  const colors = buildJetBrainsColors({
+    dark,
+    background,
+    foreground,
+    cursor: palette.primaryForeground || foreground,
+    selection:
+      palette.selectionBackground ||
+      (dark ? withAlpha(foreground, 0.24) : withAlpha(foreground, 0.18)),
+    attributes: scheme?.attributes || {},
+    accentColor: palette.accentColor,
+    secondaryAccentColor: palette.secondaryAccentColor
+  })
+
+  return {
+    label:
+      typeof json.name === 'string' && json.name.trim()
+        ? json.name.trim()
+        : fallbackName,
     mode: dark ? 'dark' : 'light',
     colors,
     display: { ...FALLBACK_DISPLAY }
@@ -375,7 +446,7 @@ function parseJsonThemeText (text) {
     disallowComments: false
   })
   if (!value || typeof value !== 'object') {
-    throw new Error('JSON 解析失败，请确认是 VS Code 主题文件')
+    throw new Error('JSON 解析失败，请确认主题文件格式')
   }
   return value
 }
@@ -438,6 +509,29 @@ function collectFromZip (buffer, fileName) {
   // 未声明清单时，扫描常见主题文件
   for (const name of names) {
     const lower = name.toLowerCase()
+    if (lower.endsWith('.theme.json')) {
+      try {
+        const json = parseJsonThemeText(strFromU8(files[name]))
+        const schemePath =
+          typeof json.editorScheme === 'string' ? json.editorScheme : ''
+        let schemeXml = ''
+        if (schemePath) {
+          const normalizedPath = schemePath.replace(/^\/+/, '')
+          const entry =
+            findEntry(files, normalizedPath) ||
+            names.find((item) =>
+              item.toLowerCase().endsWith(
+                `/${normalizedPath.split('/').pop().toLowerCase()}`
+              )
+            )
+          if (entry) schemeXml = strFromU8(files[entry])
+        }
+        themes.push(parseJetBrainsThemeJson(json, schemeXml, fileName))
+      } catch (error) {
+        warnings.push(`${name}：${error.message}`)
+      }
+      continue
+    }
     if (lower.endsWith('.icls')) {
       try {
         themes.push(
@@ -475,6 +569,13 @@ async function parseFile (file) {
   if (lower.endsWith('.icls') || lower.endsWith('.xml')) {
     return {
       themes: [parseJetBrainsIcls(new TextDecoder().decode(buffer), name)],
+      warnings: []
+    }
+  }
+  if (lower.endsWith('.theme.json')) {
+    const json = parseJsonThemeText(new TextDecoder().decode(buffer))
+    return {
+      themes: [parseJetBrainsThemeJson(json, '', name)],
       warnings: []
     }
   }
