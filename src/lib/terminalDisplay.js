@@ -1,4 +1,4 @@
-import { isKnownTerminalTheme } from './terminalThemes'
+import { TERMINAL_THEME_IDS } from './terminalThemes'
 
 export const TERMINAL_FONT_GROUPS = [
   {
@@ -162,13 +162,13 @@ const FONT_VALUES = new Set(
 
 export const DEFAULT_TERMINAL_DISPLAY = {
   themeId: 'weft',
-  fontSize: 13,
+  fontSize: 12,
   lineHeight: 1.45,
   cursorStyle: 'bar',
   enhanced: true,
   logHighlight: true,
   showTimestamps: true,
-  fontFamily: 'system'
+  fontFamily: 'noto-sans-mono-cjk'
 }
 
 export function getTerminalFontFamily(value) {
@@ -189,7 +189,7 @@ function clamp(value, min, max, fallback) {
 export function normalizeTerminalDisplay(raw) {
   const value = raw && typeof raw === 'object' ? raw : {}
   return {
-    themeId: isKnownTerminalTheme(value.themeId)
+    themeId: TERMINAL_THEME_IDS.has(value.themeId)
       ? value.themeId
       : DEFAULT_TERMINAL_DISPLAY.themeId,
     fontSize: clamp(value.fontSize, 10, 22, DEFAULT_TERMINAL_DISPLAY.fontSize),

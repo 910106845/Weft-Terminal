@@ -28,16 +28,13 @@ import {
   normalizeTerminalDisplay
 } from '../lib/terminalDisplay'
 import {
+  TERMINAL_THEMES,
   TUI_TERM_THEME,
-  addCustomTerminalThemes,
   getTerminalTheme,
   isDarkTerminalTheme,
-  removeCustomTerminalTheme,
   terminalThemePreset,
-  terminalThemeSwatch,
-  useTerminalThemes
+  terminalThemeSwatch
 } from '../lib/terminalThemes'
-import { importThemeFiles } from '../lib/themeImport'
 import { formatDateForFile, formatTime } from '../lib/format'
 import { SSH_ENCODINGS, sshProfileLabel } from '../lib/sshProfiles'
 import {
@@ -390,7 +387,6 @@ export default function TerminalPage({
   const promptRef = useRef('')
   const suggestionKeysRef = useRef(null)
   const displayMenuRef = useRef(null)
-  const themeFileInputRef = useRef(null)
   const shellMenuRef = useRef(null)
   const searchInputRef = useRef(null)
   const searchAddonRef = useRef(null)
@@ -460,40 +456,6 @@ export default function TerminalPage({
       )
     },
     [setDisplay]
-  )
-
-  const handleThemeFiles = useCallback(
-    async (event) => {
-      const files = event.target.files
-      if (!files || !files.length) return
-      const { themes, warnings } = await importThemeFiles(files)
-      event.target.value = ''
-      if (!themes.length) {
-        showToast(warnings[0] || '未识别到主题', 'error')
-        return
-      }
-      const added = addCustomTerminalThemes(themes)
-      if (!added.length) {
-        showToast('主题解析失败', 'error')
-        return
-      }
-      updateDisplay({ themeId: added[0].id })
-      showToast(`已导入 ${added.length} 个主题`)
-    },
-    [showToast, updateDisplay]
-  )
-
-  const handleRemoveTheme = useCallback(
-    (event, themeId) => {
-      event.preventDefault()
-      event.stopPropagation()
-      if (!removeCustomTerminalTheme(themeId)) return
-      if (display.themeId === themeId) {
-        updateDisplay({ themeId: DEFAULT_TERMINAL_DISPLAY.themeId })
-      }
-      showToast('已删除自定义主题')
-    },
-    [display.themeId, showToast, updateDisplay]
   )
 
   const clearLogDecorations = useCallback(() => {
@@ -2293,7 +2255,6 @@ export default function TerminalPage({
     [markCommandUsed, showToast, writeCommand]
   )
 
-  const terminalThemes = useTerminalThemes()
   const terminalTheme = getTerminalTheme(display.themeId, resolvedTheme)
   const running = status === 'running'
   const starting = status === 'starting'
@@ -2534,74 +2495,39 @@ export default function TerminalPage({
                   </button>
                 </div>
                 <div className="terminal-display-themes">
-                  <div className="terminal-theme-head">
-                    <span className="terminal-display-label">主题</span>
-                    <button
-                      type="button"
-                      className="terminal-theme-import"
-                      onClick={() => themeFileInputRef.current?.click()}
-                    >
-                      <Icon name="upload" size={12} />
-                      导入
-                    </button>
-                    <input
-                      ref={themeFileInputRef}
-                      type="file"
-                      accept=".json,.icls,.xml,.vsix,.jar,.zip"
-                      multiple
-                      hidden
-                      onChange={handleThemeFiles}
-                    />
-                  </div>
+                  <span className="terminal-display-label">主题</span>
                   <div className="terminal-theme-grid">
-                    {terminalThemes.map((theme) => {
+                    {TERMINAL_THEMES.map((theme) => {
                       const active = display.themeId === theme.id
                       return (
-                        <div className="terminal-theme-cell" key={theme.id}>
-                          <button
-                            type="button"
-                            className={`terminal-theme-chip ${
-                              active ? 'is-active' : ''
-                            }`}
-                            onClick={() =>
-                              updateDisplay(terminalThemePreset(theme.id))
-                            }
-                            title={`${theme.label}：同时应用推荐字体、字号和光标样式`}
-                          >
-                            <span className="terminal-theme-colors">
-                              {terminalThemeSwatch(
-                                theme.id,
-                                resolvedTheme
-                              ).map((color, index) => (
-                                <i
-                                  key={index}
-                                  style={{ background: color }}
-                                />
-                              ))}
-                            </span>
-                            <span className="terminal-theme-name">
-                              {theme.label}
-                            </span>
-                          </button>
-                          {theme.custom ? (
-                            <button
-                              type="button"
-                              className="terminal-theme-remove"
-                              onClick={(event) =>
-                                handleRemoveTheme(event, theme.id)
-                              }
-                              title="删除自定义主题"
-                              aria-label="删除自定义主题"
-                            >
-                              ×
-                            </button>
-                          ) : null}
-                        </div>
+                        <button
+                          key={theme.id}
+                          type="button"
+                          className={`terminal-theme-chip ${
+                            active ? 'is-active' : ''
+                          }`}
+                          onClick={() =>
+                            updateDisplay(terminalThemePreset(theme.id))
+                          }
+                          title={`${theme.label}：同时应用推荐字体、字号和光标样式`}
+                        >
+                          <span className="terminal-theme-colors">
+                            {terminalThemeSwatch(
+                              theme.id,
+                              resolvedTheme
+                            ).map((color, index) => (
+                              <i key={index} style={{ background: color }} />
+                            ))}
+                          </span>
+                          <span className="terminal-theme-name">
+                            {theme.label}
+                          </span>
+                        </button>
                       )
                     })}
                   </div>
                   <span className="terminal-theme-hint">
-                    支持导入 VS Code（.json / .vsix）和 JetBrains（.icls / .theme.json / .jar）主题
+                    选择主题会同时应用推荐字体、字号和光标样式
                   </span>
                 </div>
                 <div className="terminal-display-row">
