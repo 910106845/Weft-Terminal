@@ -1660,26 +1660,39 @@ export default function TerminalPage({
     api.write(sessionId, '\x0c')
   }, [sessionId, shellInfo?.id, status, transport])
 
+  const trimTerminalScrollback = useCallback(() => {
+    const term = termRef.current
+    if (!term) return
+    // 只删除回看缓冲，不移动光标、不清当前屏幕。
+    // 这样既不会让 ConPTY 光标和 xterm 错位，也能去掉滚动上去看到的空白。
+    try {
+      term.write('\x1b[3J')
+    } catch {
+      // 终端销毁后忽略
+    }
+  }, [])
+
   const runFullClear = useCallback(() => {
     resetTerminalSearch()
     clearLogDecorations()
     clearTimestampMarkers()
     const term = termRef.current
     if (!term) return
-    // 先清本地缓冲，保证点击后立即有反馈；
-    // 再通知 Shell 清屏，让 ConPTY / 远端终端与 xterm 光标重新同步。
     const outputHold = outputHoldRef.current
     outputHold.paused = false
     outputHold.chunks = []
     outputHold.size = 0
-    term.clear()
+    // 绝对不要本地 term.clear()：Windows ConPTY 的光标不会跟着重置，
+    // 后续输出会从旧行继续，滚动上去就是大片空白。
+    trimTerminalScrollback()
     sendNativeClear()
     term.focus()
   }, [
     clearLogDecorations,
     clearTimestampMarkers,
     resetTerminalSearch,
-    sendNativeClear
+    sendNativeClear,
+    trimTerminalScrollback
   ])
 
   const schedulePendingClear = useCallback(() => {
@@ -1700,8 +1713,9 @@ export default function TerminalPage({
   const clearTerminal = useCallback(() => {
     const term = termRef.current
     if (!term) return
-    // 命令仍在输出时只发送清屏请求，等输出停下来再做本地清屏。
-    // 立刻本地清屏会让 ConPTY 的光标停在旧行，后续日志前面出现大片空白。
+    // 回看缓冲可以立即安全清掉；当前屏幕交给 Shell 清，
+    // 运行中的程序不强行清本地缓冲，避免 ConPTY 光标错位。
+    trimTerminalScrollback()
     const busy = Date.now() - lastOutputAtRef.current < 700
     if (busy && status === 'running') {
       pendingClearRef.current = true
@@ -1713,7 +1727,14 @@ export default function TerminalPage({
     }
     pendingClearRef.current = false
     runFullClear()
-  }, [runFullClear, schedulePendingClear, sendNativeClear, showToast, status])
+  }, [
+    runFullClear,
+    schedulePendingClear,
+    sendNativeClear,
+    showToast,
+    status,
+    trimTerminalScrollback
+  ])
 
   useEffect(() => {
     return () => {

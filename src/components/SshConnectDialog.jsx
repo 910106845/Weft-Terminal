@@ -152,7 +152,7 @@ export default function SshConnectDialog({
           </button>
           <button className="primary-btn" onClick={submit}>
             <Icon name="plug" size={14} />
-            {mode === 'edit' ? '编辑连接' : '连接'}
+            {mode === 'edit' ? '保存连接' : '连接'}
           </button>
         </>
       }
