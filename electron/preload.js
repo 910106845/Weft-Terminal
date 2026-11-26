@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld('terminalAPI', {
     ipcRenderer.send('terminal:resume', { terminalId }),
   resize: (terminalId, cols, rows) =>
     ipcRenderer.send('terminal:resize', { terminalId, cols, rows }),
+  clear: (terminalId) =>
+    ipcRenderer.invoke('terminal:clear', { terminalId }),
   close: (terminalId) =>
     ipcRenderer.invoke('terminal:close', { terminalId }),
   choosePrivateKey: () => ipcRenderer.invoke('app:choose-private-key'),

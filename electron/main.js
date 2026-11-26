@@ -3252,28 +3252,47 @@ ipcMain.handle('terminal:create', async (event, options = {}) => {
     )
   )
 
+  const spawnOptions = {
+    name: 'xterm-256color',
+    cols,
+    rows,
+    cwd,
+    env: {
+      ...environment,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      CLICOLOR: '1',
+      CLICOLOR_FORCE: '1',
+      FORCE_COLOR: '1',
+      TERM_PROGRAM: 'Weft',
+      TERM_PROGRAM_VERSION: app.getVersion()
+    }
+  }
+
   let terminal
   try {
+    // Windows 使用随包附带的 conpty.dll：它的 PtyClear 能同步清空
+    // ConPTY 内部缓冲，避免清屏后光标与 xterm 错位。
     terminal = nodePty.spawn(shell.path, shell.args, {
-      name: 'xterm-256color',
-      cols,
-      rows,
-      cwd,
-      env: {
-        ...environment,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        CLICOLOR: '1',
-        CLICOLOR_FORCE: '1',
-        FORCE_COLOR: '1',
-        TERM_PROGRAM: 'Weft',
-        TERM_PROGRAM_VERSION: app.getVersion()
-      }
+      ...spawnOptions,
+      ...(process.platform === 'win32' ? { useConptyDll: true } : {})
     })
   } catch (error) {
-    return {
-      ok: false,
-      error: error.message || String(error)
+    if (process.platform === 'win32') {
+      // conpty.dll 加载失败时退回系统自带 ConPTY，至少保证终端可用。
+      try {
+        terminal = nodePty.spawn(shell.path, shell.args, spawnOptions)
+      } catch (fallbackError) {
+        return {
+          ok: false,
+          error: fallbackError.message || String(fallbackError)
+        }
+      }
+    } else {
+      return {
+        ok: false,
+        error: error.message || String(error)
+      }
     }
   }
 
@@ -3368,6 +3387,22 @@ ipcMain.on('terminal:resize', (event, payload = {}) => {
     }
   } catch {
     // 终端退出后忽略尺寸变化
+  }
+})
+
+ipcMain.handle('terminal:clear', (event, payload = {}) => {
+  const session = terminals.get(payload.terminalId)
+  if (!session || session.ownerId !== event.sender.id) {
+    return { ok: false, error: '终端不存在' }
+  }
+  if (session.kind !== 'local') {
+    return { ok: false, unsupported: true }
+  }
+  try {
+    session.terminal.clear()
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) }
   }
 })
 

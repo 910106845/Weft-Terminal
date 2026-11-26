@@ -402,9 +402,6 @@ export default function TerminalPage({
   const scrollbarFrameRef = useRef(null)
   // 用户向上滚动时暂存新输出，避免和自动跟随互相拉扯导致抖动
   const outputHoldRef = useRef({ paused: false, chunks: [], size: 0 })
-  const lastOutputAtRef = useRef(0)
-  const pendingClearRef = useRef(false)
-  const clearPollRef = useRef(0)
   const logDecorationRefs = useRef([])
   const logHighlightTimerRef = useRef(null)
   const logHighlightSignatureRef = useRef('')
@@ -1398,7 +1395,6 @@ export default function TerminalPage({
     let replayTimer = 0
     const offData = window.terminalAPI?.onData((payload) => {
       if (payload?.terminalId === sessionId) {
-        lastOutputAtRef.current = Date.now()
         // 重连成功后先等远端输出安静下来（提示符/MOTD 画完），
         // 再把断线期间暂存的输入填回命令行，避免 Shell 启动阶段重复回显。
         if (pendingReplayRef.current) {
@@ -1641,36 +1637,63 @@ export default function TerminalPage({
     return () => window.removeEventListener('keydown', handler, true)
   }, [active])
 
+  const cancelTypedLine = useCallback(() => {
+    const line = lineRef.current
+    if (!line?.known || !line.text) return
+    const api = window.terminalAPI
+    if (!api?.write) return
+    // cmd 用 Esc 清空当前输入行，readline / PSReadLine 用 Ctrl+U。
+    api.write(sessionId, shellInfo?.id === 'cmd' ? '\x1b' : '\x15')
+    line.text = ''
+    line.known = true
+  }, [sessionId, shellInfo?.id])
+
   const sendNativeClear = useCallback(() => {
     if (status !== 'running') return
     const api = window.terminalAPI
     if (!api?.write) return
+    cancelTypedLine()
     if (transport === 'ssh') {
       // readline / zsh / bash 的标准 ClearScreen
       api.write(sessionId, '\x0c')
       return
     }
-    if (shellInfo?.id === 'cmd') {
-      // cmd 不支持 Ctrl+L：空闲时用 Esc + cls；
-      // 命令仍在输出时只发 Ctrl+L，避免把 cls 当成前台程序的输入。
-      const busy = Date.now() - lastOutputAtRef.current < 700
-      api.write(sessionId, busy ? '\x0c' : '\x1bcls\r')
+    if (shellInfo?.id === 'cmd' || shellInfo?.id === 'powershell') {
+      // Windows 的 cmd / PowerShell 直接执行 cls 最可靠。
+      api.write(sessionId, 'cls\r')
       return
     }
     api.write(sessionId, '\x0c')
-  }, [sessionId, shellInfo?.id, status, transport])
+  }, [cancelTypedLine, sessionId, shellInfo?.id, status, transport])
 
-  const trimTerminalScrollback = useCallback(() => {
+  const clearTerminalBuffer = useCallback(async () => {
     const term = termRef.current
     if (!term) return
-    // 只删除回看缓冲，不移动光标、不清当前屏幕。
-    // 这样既不会让 ConPTY 光标和 xterm 错位，也能去掉滚动上去看到的空白。
+    // 前端先清掉回看缓冲，并把当前提示行留在顶部。
     try {
-      term.write('\x1b[3J')
+      term.clear()
     } catch {
       // 终端销毁后忽略
     }
-  }, [])
+    if (transport === 'ssh') {
+      // SSH 没有 ConPTY，让远端 Shell 自己重绘屏幕。
+      window.terminalAPI?.write?.(sessionId, '\x0c')
+      return
+    }
+    // 本地终端调用 node-pty 的 clear()，同步清空 ConPTY 内部缓冲。
+    // 只清前端会让 ConPTY 的光标停留在旧位置，后续输出重新打印屏幕。
+    const api = window.terminalAPI
+    if (!api?.clear) {
+      sendNativeClear()
+      return
+    }
+    try {
+      const result = await api.clear(sessionId)
+      if (!result?.ok) sendNativeClear()
+    } catch {
+      sendNativeClear()
+    }
+  }, [sendNativeClear, sessionId, transport])
 
   const runFullClear = useCallback(() => {
     resetTerminalSearch()
@@ -1682,67 +1705,18 @@ export default function TerminalPage({
     outputHold.paused = false
     outputHold.chunks = []
     outputHold.size = 0
-    // 绝对不要本地 term.clear()：Windows ConPTY 的光标不会跟着重置，
-    // 后续输出会从旧行继续，滚动上去就是大片空白。
-    trimTerminalScrollback()
-    sendNativeClear()
+    void clearTerminalBuffer()
     term.focus()
   }, [
     clearLogDecorations,
+    clearTerminalBuffer,
     clearTimestampMarkers,
-    resetTerminalSearch,
-    sendNativeClear,
-    trimTerminalScrollback
+    resetTerminalSearch
   ])
-
-  const schedulePendingClear = useCallback(() => {
-    if (clearPollRef.current) return
-    const tick = () => {
-      clearPollRef.current = 0
-      if (!pendingClearRef.current) return
-      if (Date.now() - lastOutputAtRef.current < 700) {
-        clearPollRef.current = window.setTimeout(tick, 250)
-        return
-      }
-      pendingClearRef.current = false
-      runFullClear()
-    }
-    clearPollRef.current = window.setTimeout(tick, 250)
-  }, [runFullClear])
 
   const clearTerminal = useCallback(() => {
-    const term = termRef.current
-    if (!term) return
-    // 回看缓冲可以立即安全清掉；当前屏幕交给 Shell 清，
-    // 运行中的程序不强行清本地缓冲，避免 ConPTY 光标错位。
-    trimTerminalScrollback()
-    const busy = Date.now() - lastOutputAtRef.current < 700
-    if (busy && status === 'running') {
-      pendingClearRef.current = true
-      sendNativeClear()
-      showToast('命令仍在输出，输出暂停后自动清屏')
-      schedulePendingClear()
-      term.focus()
-      return
-    }
-    pendingClearRef.current = false
     runFullClear()
-  }, [
-    runFullClear,
-    schedulePendingClear,
-    sendNativeClear,
-    showToast,
-    status,
-    trimTerminalScrollback
-  ])
-
-  useEffect(() => {
-    return () => {
-      if (clearPollRef.current) clearTimeout(clearPollRef.current)
-      clearPollRef.current = 0
-      pendingClearRef.current = false
-    }
-  }, [])
+  }, [runFullClear])
 
   const answerHostKey = useCallback(
     (accept) => {
