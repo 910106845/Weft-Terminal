@@ -1,6 +1,6 @@
 {
   "name": "weft-terminal",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "description": "Weft Terminal — 串口 · 终端 · SSH",
   "main": "electron/main.js",
   "author": "Weft",
